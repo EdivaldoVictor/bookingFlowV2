@@ -43,15 +43,20 @@ async function getCalComAvailability(
   console.log(`[Cal.com] Using CALCOM_API_KEY: ${apiKey.substring(0, 20)}...`);
   console.log(`[Cal.com] Using CALCOM_API_URL: ${calComUrl}`);
 
+  // Declare variables outside try block for error logging
+  let calComUserId: string | undefined;
+  let eventTypeId: string | undefined;
+  let requestUrl = "";
+
   try {
     // Map practitioner ID to Cal.com user/event type
     // In production, you'd have a mapping table in your database
-    const calComUserId = process.env[`CALCOM_USER_ID_${practitionerId}`];
-    const eventTypeId = process.env[`CALCOM_EVENT_TYPE_${practitionerId}`];
+    calComUserId = process.env.CALCOM_USER_ID_1;
+    eventTypeId = process.env[`CALCOM_EVENT_TYPE_${practitionerId}`];
 
     if (!calComUserId || !eventTypeId) {
       console.warn(
-        `[Cal.com] Missing environment variables for practitioner ${practitionerId}: CALCOM_USER_ID_${practitionerId} or CALCOM_EVENT_TYPE_${practitionerId}`
+        `[Cal.com] Missing environment variables for practitioner ${practitionerId}: CALCOM_USER_ID or CALCOM_EVENT_TYPE_${practitionerId}`
       );
       console.log("[Availability] Falling back to mock data due to missing configuration");
       return getMockAvailability(practitionerId);
@@ -74,7 +79,7 @@ async function getCalComAvailability(
     );
 
     // Fetch busy slots from Cal.com
-    const requestUrl = `${calComUrl}/availability`;
+    requestUrl = `${calComUrl}/availability`;
     const requestParams = {
       userId: calComUserId,
       eventTypeId: eventTypeId,
@@ -94,7 +99,7 @@ async function getCalComAvailability(
     console.log(`[Cal.com] Response status: ${response.status}`);
     console.log(`[Cal.com] Response data:`, response.data);
 
-    const busySlots = response.data.busy.map(slot => ({
+    const busySlots = response.data.busy.map((slot: any) => ({
       start: new Date(slot.start),
       end: new Date(slot.end),
     }));
@@ -238,4 +243,144 @@ export async function getAvailabilityForPractitioner(
 
   console.log(`[Availability] Returning ${slots.length} slots from Cal.com API`);
   return slots;
+}
+
+/**
+ * Create a booking/meeting in Cal.com when payment is confirmed
+ * This should be called after successful Stripe payment
+ */
+export async function createCalComBooking(bookingData: {
+  practitionerId: number;
+  clientName: string;
+  clientEmail: string;
+  clientPhone?: string;
+  startTime: Date;
+  endTime: Date;
+  title?: string;
+  description?: string;
+}): Promise<{ success: boolean; eventId?: string; error?: string }> {
+  const apiKey = process.env.CALCOM_API_KEY;
+  const calComUrl = process.env.CALCOM_API_URL || "https://api.cal.com/v1";
+
+  console.log(`[Cal.com] Creating booking for practitioner ${bookingData.practitionerId}`);
+
+  if (!apiKey) {
+    console.warn("[Cal.com] CALCOM_API_KEY not set, cannot create booking");
+    return { success: false, error: "API key not configured" };
+  }
+
+  try {
+    // Get the correct userId and eventTypeId for this practitioner
+    const calComUserId = process.env.CALCOM_USER_ID_1;
+    const eventTypeId = process.env[`CALCOM_EVENT_TYPE_${bookingData.practitionerId}`];
+
+    if (!calComUserId || !eventTypeId) {
+      console.warn(`[Cal.com] Missing environment variables for practitioner ${bookingData.practitionerId}`);
+      return { success: false, error: "Practitioner configuration missing" };
+    }
+
+    // Prepare the booking data for Cal.com API
+    const bookingPayload = {
+      title: bookingData.title || `Consultation with ${bookingData.clientName}`,
+      description: bookingData.description || `Booking created via BookingFlow`,
+      startTime: bookingData.startTime.toISOString(),
+      endTime: bookingData.endTime.toISOString(),
+      attendees: [
+        {
+          email: bookingData.clientEmail,
+          name: bookingData.clientName,
+          phone: bookingData.clientPhone,
+        }
+      ],
+      eventTypeId: parseInt(eventTypeId),
+      userId: parseInt(calComUserId),
+    };
+
+    console.log(`[Cal.com] Creating booking with payload:`, bookingPayload);
+
+    // Create the booking via Cal.com API
+    const response = await axios.post(`${calComUrl}/bookings`, bookingPayload, {
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      timeout: 10000, // 10 seconds timeout
+    });
+
+    console.log(`[Cal.com] Booking created successfully:`, response.data);
+
+    return {
+      success: true,
+      eventId: response.data.id || response.data.uid,
+    };
+
+  } catch (error: any) {
+    console.error("[Cal.com] Failed to create booking:", error);
+
+    // Handle specific error types
+    if (error.response) {
+      const status = error.response.status;
+      const errorData = error.response.data;
+
+      console.error(`[Cal.com] API Error ${status}:`, errorData);
+
+      if (status === 400) {
+        return { success: false, error: "Invalid booking data or time conflict" };
+      } else if (status === 401) {
+        return { success: false, error: "API key invalid or expired" };
+      } else if (status === 404) {
+        return { success: false, error: "Event type or user not found" };
+      } else if (status === 409) {
+        return { success: false, error: "Time slot already booked" };
+      }
+    }
+
+    return {
+      success: false,
+      error: error.message || "Unknown error creating booking"
+    };
+  }
+}
+
+/**
+ * Cancel a booking in Cal.com
+ * Should be called when a booking is cancelled
+ */
+export async function cancelCalComBooking(bookingUid: string): Promise<{ success: boolean; error?: string }> {
+  const apiKey = process.env.CALCOM_API_KEY;
+  const calComUrl = process.env.CALCOM_API_URL || "https://api.cal.com/v1";
+
+  console.log(`[Cal.com] Cancelling booking ${bookingUid}`);
+
+  if (!apiKey) {
+    console.warn("[Cal.com] CALCOM_API_KEY not set, cannot cancel booking");
+    return { success: false, error: "API key not configured" };
+  }
+
+  try {
+    const response = await axios.delete(`${calComUrl}/bookings/${bookingUid}`, {
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+      },
+      timeout: 5000,
+    });
+
+    console.log(`[Cal.com] Booking cancelled successfully:`, bookingUid);
+    return { success: true };
+
+  } catch (error: any) {
+    console.error("[Cal.com] Failed to cancel booking:", error);
+
+    if (error.response) {
+      const status = error.response.status;
+      if (status === 404) {
+        return { success: false, error: "Booking not found" };
+      }
+    }
+
+    return {
+      success: false,
+      error: error.message || "Unknown error cancelling booking"
+    };
+  }
 }

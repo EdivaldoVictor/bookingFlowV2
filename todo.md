@@ -58,6 +58,14 @@
 - [ ] Test real payment flow end-to-end
 - [ ] Update booking status on successful payment via webhook
 
+## Cal.com Booking Integration ✅
+
+- [x] Implement createCalComBooking function for creating meetings
+- [x] Implement cancelCalComBooking function for cancelling meetings
+- [x] Integrate Cal.com booking creation in confirmBooking endpoint
+- [x] Add proper error handling for Cal.com API failures
+- [x] Update booking confirmation to create Cal.com events automatically
+
 ## Code Cleanup & Optimization
 
 - [ ] Remove mock data functions from availability.ts (keep only as fallback)

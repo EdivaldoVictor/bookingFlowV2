@@ -47,7 +47,7 @@ export default function Home() {
       <header className="border-b border-border">
         <div className="container py-6">
           <div className="flex items-center justify-between">
-            <h1 className="text-2xl font-bold text-foreground">BookingFlow</h1>
+            <h1 className="text-2xl font-bold text-foreground">Healgrid</h1>
             <div className="flex items-center gap-4">
               {isAuthenticated && user ? (
                 <div className="text-sm text-muted-foreground">
@@ -227,7 +227,7 @@ export default function Home() {
         <div className="container py-8">
           <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
             <p className="text-sm text-muted-foreground">
-              © 2024 BookingFlow. All rights reserved.
+              © 2024 Healgrid. All rights reserved.
             </p>
             <div className="flex gap-6 text-sm text-muted-foreground">
               <a href="#" className="hover:text-foreground transition-colors">

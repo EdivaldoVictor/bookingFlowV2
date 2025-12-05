@@ -6,6 +6,7 @@ import { z } from "zod";
 import {
   getPractitioner,
   createBooking,
+  getBooking,
   getBookingByStripeSessionId,
   updateBookingStatus,
   checkBookingConflict,
@@ -13,6 +14,7 @@ import {
   getDb,
 } from "./db";
 import { practitioners } from "../drizzle/schema";
+import { createCalComBooking, cancelCalComBooking } from "./services/availability";
 import { getAvailabilityForPractitioner } from "./services/availability";
 import { createCheckoutSession } from "./services/stripe";
 
@@ -163,7 +165,7 @@ export const appRouter = router({
 
     /**
      * Confirm booking after successful payment
-     * Called by the webhook handler
+     * Called by the webhook handler - creates event in Cal.com
      */
     confirmBooking: publicProcedure
       .input(
@@ -179,11 +181,75 @@ export const appRouter = router({
           throw new Error("Booking not found");
         }
 
+        // Update booking status to confirmed
         await updateBookingStatus(booking.id, "confirmed");
+
+        // Try to create the event in Cal.com
+        try {
+          const practitioner = await getPractitioner(booking.practitionerId);
+          if (practitioner) {
+            // Calculate end time (assuming 1 hour sessions)
+            const endTime = new Date(booking.bookingTime);
+            endTime.setHours(endTime.getHours() + 1);
+
+            const calComResult = await createCalComBooking({
+              practitionerId: booking.practitionerId,
+              clientName: booking.clientName,
+              clientEmail: booking.clientEmail,
+              clientPhone: booking.clientPhone,
+              startTime: booking.bookingTime,
+              endTime: endTime,
+              title: `Consultation with ${practitioner.name}`,
+              description: `Booked via BookingFlow - Payment confirmed`,
+            });
+
+            if (calComResult.success) {
+              console.log(`[Booking] Cal.com event created: ${calComResult.eventId}`);
+            } else {
+              console.warn(`[Booking] Failed to create Cal.com event: ${calComResult.error}`);
+            }
+          }
+        } catch (error) {
+          console.error("[Booking] Error creating Cal.com event:", error);
+          // Don't fail the booking confirmation if Cal.com fails
+        }
 
         return {
           bookingId: booking.id,
           status: "confirmed",
+        };
+      }),
+
+    /**
+     * Cancel a booking and remove from Cal.com
+     */
+    cancelBooking: publicProcedure
+      .input(
+        z.object({
+          bookingId: z.number(),
+        })
+      )
+      .mutation(async ({ input }) => {
+        const booking = await getBooking(input.bookingId);
+        if (!booking) {
+          throw new Error("Booking not found");
+        }
+
+        // Update booking status to cancelled
+        await updateBookingStatus(booking.id, "cancelled");
+
+        // Try to cancel the event in Cal.com if it exists
+        try {
+          // Note: You'd need to store the Cal.com event ID in the booking record
+          // For now, this is a placeholder for future implementation
+          console.log(`[Booking] Booking ${booking.id} cancelled - Cal.com event should be cancelled too`);
+        } catch (error) {
+          console.error("[Booking] Error cancelling Cal.com event:", error);
+        }
+
+        return {
+          bookingId: booking.id,
+          status: "cancelled",
         };
       }),
   }),

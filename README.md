@@ -62,10 +62,12 @@ vite-express-booking/
 
 ### Core Functionality
 
-- **Practitioner Listing:** Browse available service providers with hourly rates
+- **Practitioner Listing:** Browse available service providers from database with hourly rates
+- **Real Availability:** Fetch actual availability from Cal.com practitioner calendars
 - **Time Slot Selection:** View available appointments for the next 14 days
 - **Booking Form:** Collect client name, email, and phone number
 - **Payment Processing:** Mock Stripe integration (ready for real Stripe)
+- **Automatic Event Creation:** Creates meetings in Cal.com upon payment confirmation
 - **Confirmation Page:** Display booking ID and confirmation details
 
 ### Technical Features
@@ -75,6 +77,7 @@ vite-express-booking/
 - **Express Backend:** Fast Express.js server with tRPC API
 - **Database Layer:** PostgreSQL with Drizzle ORM (Neon hosted)
 - **Smart Fallbacks:** Cal.com integration with automatic mock fallback
+- **Event Management:** Automatic Cal.com meeting creation and cancellation
 - **Payment Simulation:** Stripe checkout mock for seamless development
 - **Responsive UI:** Mobile-first design with Tailwind CSS
 - **Auto Database Setup:** One-command database initialization

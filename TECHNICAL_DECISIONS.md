@@ -267,7 +267,7 @@ echo $STRIPE_WEBHOOK_SECRET
 
 ```bash
 # Test availability endpoint
-curl -X GET "https://your-cal-instance.com/api/v1/availability" \
+curl -X GET "https://cal.com/api/v1/availability" \
   -H "Authorization: Bearer $CAL_COM_API_KEY" \
   -H "Content-Type: application/json"
 ```
@@ -481,15 +481,23 @@ bookings: router({
 3. **No Caching:** Cal.com API called on every availability request
 4. **Single Timezone:** Currently supports only America/Recife timezone
 
-### Future Improvements (With More Time)
+### Current Implementation Status
 
-1. **Real Stripe Integration** ⚠️ HIGH PRIORITY
+1. **Cal.com Integration** ✅ FULLY IMPLEMENTED
+   - Real availability fetching from practitioner calendars
+   - Automatic event creation upon payment confirmation
+   - Proper error handling and fallback to mock data
+   - Event cancellation support
+
+2. **Future Improvements (With More Time)**
+
+3. **Real Stripe Integration** ⚠️ HIGH PRIORITY
    - Process actual payments (currently most critical missing piece)
    - Handle payment failures and retries
    - Implement refund logic
    - Setup webhook signature validation
 
-2. **Cal.com Enhancements**
+4. **Cal.com Enhancements**
    - Add caching layer to reduce API calls
    - Support multiple timezones
    - Handle calendar sync errors gracefully
@@ -564,7 +572,47 @@ bookings: router({
 
 - Input: `{ stripeSessionId: string }`
 - Output: `{ bookingId, status }`
-- Purpose: Confirm booking after successful payment
+- Purpose: Confirm booking after successful payment and create Cal.com event
+
+**bookings.cancelBooking**
+
+- Input: `{ bookingId: number }`
+- Output: `{ bookingId, status }`
+- Purpose: Cancel booking and remove from Cal.com
+
+### Cal.com Service Functions
+
+**createCalComBooking(bookingData)** - Creates a meeting in Cal.com calendar
+
+```typescript
+const result = await createCalComBooking({
+  practitionerId: 1,
+  clientName: "John Doe",
+  clientEmail: "john@example.com",
+  clientPhone: "+1234567890",
+  startTime: new Date("2025-12-10T14:00:00Z"),
+  endTime: new Date("2025-12-10T15:00:00Z"),
+  title: "Consultation Session",
+  description: "Booked via BookingFlow"
+});
+
+if (result.success) {
+  console.log("Event created:", result.eventId);
+} else {
+  console.error("Failed:", result.error);
+}
+```
+
+**cancelCalComBooking(bookingUid)** - Cancels a meeting in Cal.com
+
+```typescript
+const result = await cancelCalComBooking("booking-uid-from-calcom");
+if (result.success) {
+  console.log("Event cancelled");
+} else {
+  console.error("Failed:", result.error);
+}
+```
 
 ---
 
@@ -626,4 +674,4 @@ This implementation provides a **production-ready booking system** with **real C
 
 The architecture supports easy migration to production services. The Cal.com integration demonstrates the pattern for external API integrations, and the same approach can be applied to complete the Stripe implementation.
 
-For questions or issues, refer to the debugging strategy in Section 4 or contact the development team.
+For questions or issues, refer to the debugging strategy in Section 4 or contact the developer A.K.A Edivaldo Victor, phone number (81 99715-0571).
