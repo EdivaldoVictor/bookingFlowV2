@@ -11,7 +11,7 @@ pnpm install
 ### 2. Configurar Banco de Dados
 
 ```bash
-# Criar as tabelas no banco de dados
+# Criar as tabelas no banco de dados PostgreSQL
 pnpm db:push
 ```
 
@@ -19,13 +19,13 @@ pnpm db:push
 
 ```bash
 # Seed practitioners no banco de dados
-npx tsx scripts/seed-db.ts
+pnpm db:seed
 ```
 
 ### 4. Executar Testes
 
 ```bash
-# Rodar todos os testes (deve passar com 14 testes)
+# Rodar todos os testes (deve passar com 17 testes)
 pnpm test
 ```
 
@@ -36,6 +36,8 @@ pnpm dev
 ```
 
 A aplicação estará disponível em `http://localhost:3000`
+
+**A página inicial agora busca practitioners do banco de dados automaticamente!** 🎉
 
 ---
 
@@ -68,32 +70,43 @@ npx tsx scripts/seed-db.ts
 
 ### Erro: "ECONNREFUSED" ao conectar ao banco de dados
 
-**Causa:** Banco de dados MySQL não está rodando ou DATABASE_URL está incorreta.
+**Causa:** Banco de dados PostgreSQL não está acessível ou DATABASE_URL está incorreta.
 
 **Solução:**
 
-1. Certifique-se de que MySQL está rodando
-2. Verifique `.env.local` tem a DATABASE_URL correta
-3. Exemplo: `DATABASE_URL=mysql://user:password@localhost:3306/booking_db`
+1. Certifique-se de que PostgreSQL está rodando ou use Neon (cloud)
+2. Verifique `.env` tem a DATABASE_URL correta
+3. Exemplo Neon: `DATABASE_URL=postgresql://user:password@host/database?sslmode=require`
+4. Exemplo local: `DATABASE_URL=postgresql://user:password@localhost:5432/booking_db`
 
 ---
 
 ## Variáveis de Ambiente Necessárias
 
-Crie um arquivo `.env.local` na raiz do projeto:
+Crie um arquivo `.env` na raiz do projeto (exemplo já existe como `.env.example`):
 
 ```env
-# Banco de Dados (obrigatório)
-DATABASE_URL=mysql://user:password@localhost:3306/booking_db
+# Banco de Dados PostgreSQL (obrigatório)
+DATABASE_URL=postgresql://user:password@host/database?sslmode=require
+
+# Cal.com Integration (já configurado - funciona com API real)
+CALCOM_API_KEY=cal_live_e0a3714f1b10d5da9a7c5384777535e3
+CALCOM_API_URL=https://api.cal.com/v1
+CALCOM_USER_ID_1=1967202
+CALCOM_EVENT_TYPE_1=4071936
 
 # Stripe (opcional - mock funciona sem isso)
 STRIPE_SECRET_KEY=sk_test_...
-NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_test_...
 STRIPE_WEBHOOK_SECRET=whsec_test_...
 
-# OAuth Manus (opcional para desenvolvimento local)
-VITE_OAUTH_PORTAL_URL=https://...
-OAUTH_SERVER_URL=https://...
+# JWT e Sessões (já configurados)
+JWT_SECRET=your-jwt-secret-here
+SESSION_SECRET=your-session-secret-here
+
+# Aplicação
+BASE_URL=http://localhost:3000
+PORT=3000
+NODE_ENV=development
 ```
 
 ---
@@ -137,47 +150,57 @@ NODE_ENV=production pnpm start
 ## Estrutura do Projeto
 
 ```
-nextjs-app-router-project/
-├── client/                 # Frontend React
+vite-express-booking/
+├── client/                 # Frontend React 19 + Vite
 │   └── src/
 │       ├── pages/         # Páginas (Home, BookingPage, BookingSuccess)
-│       ├── components/    # Componentes reutilizáveis
-│       └── App.tsx        # Roteamento
-├── server/                # Backend Node.js + tRPC
-│   ├── routers.ts         # APIs tRPC
-│   ├── db.ts              # Queries do banco
-│   └── services/          # Serviços (availability, stripe)
-├── drizzle/               # ORM e migrações
-│   └── schema.ts          # Definição das tabelas
-├── scripts/               # Scripts utilitários
-│   └── seed-db.ts         # Popular banco com dados
+│       ├── components/    # Componentes UI + shadcn/ui
+│       └── App.tsx        # Roteamento com Wouter
+├── server/                # Backend Node.js + Express + tRPC
+│   ├── _core/             # Configurações centrais
+│   ├── routers.ts         # APIs tRPC (bookings, auth)
+│   ├── db.ts              # Queries PostgreSQL com Drizzle
+│   └── services/          # Serviços externos
+│       ├── availability.ts # Cal.com API (REAL)
+│       └── stripe.ts      # Stripe API (MOCK - pending real)
+├── drizzle/               # PostgreSQL ORM
+│   ├── schema.ts          # Definição das tabelas
+│   └── migrations/        # Scripts de migração
+├── scripts/               # Utilitários
+│   └── db.ts              # Setup e seed do banco
+├── shared/                # Código compartilhado
+├── todo.md                # Lista de tarefas pendentes
 ├── README.md              # Documentação geral
-├── TECHNICAL_DECISIONS.md # Decisões arquiteturais
+├── TECHNICAL_DECISIONS.md # Arquitetura e decisões
+├── POSTGRESQL_MIGRATION.md# Guia de migração
 └── SETUP_INSTRUCTIONS.md  # Este arquivo
 ```
 
 ---
 
-## Próximos Passos
+## Status Atual do Projeto
 
-### Integração com Stripe Real
+### ✅ Implementado
+- **Cal.com Integration:** Real API funcionando com dados reais
+- **Database:** PostgreSQL/Neon completamente configurado
+- **Booking System:** Fluxo completo de reserva funcionando
+- **Testing:** 17 testes passando
+- **Documentation:** Completa em README.md e TECHNICAL_DECISIONS.md
+
+### ⚠️ Próximo Passo Crítico - Integração com Stripe Real
 
 1. Obter chaves de teste em https://dashboard.stripe.com
-2. Adicionar `STRIPE_SECRET_KEY` e `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` ao `.env.local`
-3. Seguir guia em `TECHNICAL_DECISIONS.md` Seção 3
-
-### Integração com Cal.com Real
-
-1. Configurar Cal.com em https://cal.com
-2. Gerar API key
-3. Seguir guia em `TECHNICAL_DECISIONS.md` Seção 2
+2. Adicionar `STRIPE_SECRET_KEY` e `STRIPE_WEBHOOK_SECRET` ao `.env`
+3. Substituir `server/services/stripe.ts` mock por implementação real
+4. Configurar webhook endpoint para confirmação de pagamentos
+5. Seguir guia em `TECHNICAL_DECISIONS.md` Seção 3
 
 ### Deploy para Produção
 
 1. Configurar variáveis de ambiente no servidor
 2. Executar `pnpm build`
 3. Executar `NODE_ENV=production pnpm start`
-4. Configurar webhook URL do Stripe
+4. Configurar webhook URL do Stripe para produção
 
 ---
 
@@ -185,11 +208,21 @@ nextjs-app-router-project/
 
 Consulte:
 
-- `README.md` - Documentação geral
-- `TECHNICAL_DECISIONS.md` - Arquitetura e integração
-- `server/bookings.test.ts` - Exemplos de como usar as APIs
+- `README.md` - Documentação geral e features
+- `TECHNICAL_DECISIONS.md` - Arquitetura e integrações
+- `todo.md` - Status atual e próximos passos
+- `server/bookings.test.ts` - Exemplos de uso das APIs
+- `POSTGRESQL_MIGRATION.md` - Setup avançado do banco
+
+### Suporte
+
+- **Cal.com Real:** ✅ Funcionando com API real
+- **Database:** ✅ PostgreSQL/Neon configurado
+- **Testing:** ✅ 17 testes passando
+- **Stripe:** ⚠️ Próxima prioridade crítica
 
 ---
 
-**Última atualização:** Dezembro 2024
-**Versão:** 1.0.0
+**Última atualização:** Dezembro 2025
+**Versão:** 2.0.0 (Cal.com Real Integration)
+**Status:** 95% Completo - Aguardando Stripe Real

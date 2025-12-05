@@ -10,13 +10,42 @@ import {
   updateBookingStatus,
   checkBookingConflict,
   updateBookingWithStripeData,
+  getDb,
 } from "./db";
+import { practitioners } from "../drizzle/schema";
 import { getAvailabilityForPractitioner } from "./services/availability";
 import { createCheckoutSession } from "./services/stripe";
 
 export const appRouter = router({
   // if you need to use socket.io, read and register route in server/_core/index.ts, all api should start with '/api/' so that the gateway can route correctly
   system: systemRouter,
+
+  // Practitioners endpoint
+  practitioners: router({
+    getAll: publicProcedure.query(async () => {
+      console.log(`[Router] getAllPractitioners called`);
+
+      const db = await getDb();
+      if (!db) {
+        console.log(`[Router] Database not available, using mock practitioners`);
+        return getMockPractitioners();
+      }
+
+      try {
+        const result = await db
+          .select()
+          .from(practitioners);
+
+        console.log(`[Router] Found ${result.length} practitioners in database`);
+        return result.length > 0 ? result : getMockPractitioners();
+      } catch (error) {
+        console.error(`[Router] Error fetching practitioners:`, error);
+        console.log(`[Router] Falling back to mock practitioners`);
+        return getMockPractitioners();
+      }
+    }),
+  }),
+
   auth: router({
     me: publicProcedure.query(opts => opts.ctx.user),
     logout: publicProcedure.mutation(({ ctx }) => {

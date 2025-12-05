@@ -48,7 +48,7 @@ nextjs-app-router-project/
 ├── client/
 │   └── src/
 │       ├── pages/
-│       │   ├── Home.tsx              # Landing page with practitioner list
+│       │   ├── Home.tsx              # Landing page with practitioners from database
 │       │   ├── BookingPage.tsx       # Booking form with time slot selection
 │       │   └── BookingSuccess.tsx    # Confirmation page
 │       ├── App.tsx                   # Route configuration
@@ -542,6 +542,12 @@ bookings: router({
 
 ### tRPC Procedures
 
+**practitioners.getAll**
+
+- Input: None
+- Output: `Practitioner[]`
+- Purpose: Fetch all practitioners from database
+
 **bookings.getAvailability**
 
 - Input: `{ practitionerId: number }`
@@ -586,6 +592,37 @@ This implementation provides a **production-ready booking system** with **real C
 - ✅ **Database:** PostgreSQL/Neon, fully operational
 - ✅ **Booking Flow:** Complete end-to-end (create → payment → confirm)
 - ⚠️ **Stripe Integration:** Mock implementation (needs real payment processing)
+
+## FLUXO DE DADOS COMPLETO
+1. Usuário acessa /book/1
+   ↓
+2. Frontend → tRPC getAvailability({ practitionerId: 1 })
+   ↓
+3. Backend → Database: SELECT * FROM practitioners WHERE id = 1
+   ↓
+4. Backend → Cal.com: GET /availability?userId=1967202&eventTypeId=4071936
+   ↓
+5. Cal.com → Backend: { busy: [], dateRanges: [...], workingHours: [...] }
+   ↓
+6. Backend → Frontend: { practitioner: {...}, slots: [...] }
+   ↓
+7. Usuário seleciona slot e preenche formulário
+   ↓
+8. Frontend → tRPC createBooking({ ...dados da reserva })
+   ↓
+9. Backend → Database: INSERT INTO bookings VALUES (...)
+   ↓
+10. Backend → Stripe: Cria checkout session (mock)
+    ↓
+11. Backend → Database: UPDATE bookings SET stripeSessionId = '...'
+    ↓
+12. Frontend → Redireciona para checkout.url
+    ↓
+13. Stripe → Usuário paga
+    ↓
+14. Stripe → Webhook /api/webhooks/stripe
+    ↓
+15. Backend → Database: UPDATE bookings SET status = 'confirmed'
 
 The architecture supports easy migration to production services. The Cal.com integration demonstrates the pattern for external API integrations, and the same approach can be applied to complete the Stripe implementation.
 

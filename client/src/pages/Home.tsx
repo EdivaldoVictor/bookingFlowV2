@@ -3,32 +3,43 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { getLoginUrl } from "@/const";
 import { Link } from "wouter";
-import { Calendar, Users, CreditCard } from "lucide-react";
+import { Calendar, Users, CreditCard, Loader2 } from "lucide-react";
+import { trpc } from "@/lib/trpc";
 
 export default function Home() {
   const { user, isAuthenticated } = useAuth();
 
-  // Mock practitioners data
-  const practitioners = [
+  // Fetch practitioners from backend
+  const {
+    data: practitioners,
+    isLoading,
+    error,
+  } = trpc.practitioners.getAll.useQuery();
+
+  // Mock data fallback
+  const mockPractitioners = [
     {
       id: 1,
       name: "Dr. Sarah Johnson",
       description: "Clinical Psychologist",
-      rate: 8000, // £80 in pence
+      hourlyRate: 8000, // £80 in pence
     },
     {
       id: 2,
       name: "Dr. Michael Chen",
       description: "Therapist",
-      rate: 7500, // £75 in pence
+      hourlyRate: 7500, // £75 in pence
     },
     {
       id: 3,
       name: "Emma Wilson",
       description: "Counselor",
-      rate: 6000, // £60 in pence
+      hourlyRate: 6000, // £60 in pence
     },
   ];
+
+  // Use API data if available, otherwise use mock data
+  const finalPractitioners = practitioners || mockPractitioners;
 
   return (
     <div className="min-h-screen bg-background">
@@ -107,37 +118,89 @@ export default function Home() {
       {/* Practitioners Section */}
       <section className="bg-muted/30 py-16">
         <div className="container">
-          <h2 className="text-3xl font-bold text-foreground mb-8">
-            Our Practitioners
-          </h2>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {practitioners.map(practitioner => (
-              <Card key={practitioner.id} className="p-6 flex flex-col">
-                <div className="flex-1">
-                  <h3 className="text-xl font-semibold text-foreground mb-1">
-                    {practitioner.name}
-                  </h3>
-                  <p className="text-sm text-muted-foreground mb-4">
-                    {practitioner.description}
-                  </p>
-                </div>
-
-                <div className="border-t border-border pt-4 mb-4">
-                  <p className="text-2xl font-bold text-foreground">
-                    £{(practitioner.rate / 100).toFixed(2)}
-                  </p>
-                  <p className="text-xs text-muted-foreground">per hour</p>
-                </div>
-
-                <Button asChild className="w-full">
-                  <Link href={`/book/${practitioner.id}`}>
-                    Book Appointment
-                  </Link>
-                </Button>
-              </Card>
-            ))}
+          <div className="flex items-center justify-between mb-8">
+            <h2 className="text-3xl font-bold text-foreground">
+              Our Practitioners
+            </h2>
+            {!isLoading && (
+              <div className="flex items-center gap-2">
+                <div className={`w-2 h-2 rounded-full ${
+                  practitioners ? 'bg-green-500' : 'bg-orange-500'
+                }`} />
+                <span className="text-sm text-muted-foreground">
+                  {practitioners ? 'Connected to database' : 'Using demo data'}
+                </span>
+              </div>
+            )}
           </div>
+
+          {isLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="animate-spin w-8 h-8 mr-3" />
+              <p className="text-muted-foreground">Loading practitioners...</p>
+            </div>
+          ) : error ? (
+            <div className="text-center py-12">
+              <p className="text-red-600 mb-4">
+                Failed to load practitioners. Using demo data.
+              </p>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {finalPractitioners.map(practitioner => (
+                  <Card key={practitioner.id} className="p-6 flex flex-col border-orange-200">
+                    <div className="flex-1">
+                      <h3 className="text-xl font-semibold text-foreground mb-1">
+                        {practitioner.name}
+                      </h3>
+                      <p className="text-sm text-muted-foreground mb-4">
+                        {practitioner.description}
+                      </p>
+                    </div>
+
+                    <div className="border-t border-border pt-4 mb-4">
+                      <p className="text-2xl font-bold text-foreground">
+                        £{(practitioner.hourlyRate / 100).toFixed(2)}
+                      </p>
+                      <p className="text-xs text-muted-foreground">per hour</p>
+                    </div>
+
+                    <Button asChild className="w-full">
+                      <Link href={`/book/${practitioner.id}`}>
+                        Book Appointment
+                      </Link>
+                    </Button>
+                  </Card>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {finalPractitioners.map(practitioner => (
+                <Card key={practitioner.id} className="p-6 flex flex-col">
+                  <div className="flex-1">
+                    <h3 className="text-xl font-semibold text-foreground mb-1">
+                      {practitioner.name}
+                    </h3>
+                    <p className="text-sm text-muted-foreground mb-4">
+                      {practitioner.description}
+                    </p>
+                  </div>
+
+                  <div className="border-t border-border pt-4 mb-4">
+                    <p className="text-2xl font-bold text-foreground">
+                      £{(practitioner.hourlyRate / 100).toFixed(2)}
+                    </p>
+                    <p className="text-xs text-muted-foreground">per hour</p>
+                  </div>
+
+                  <Button asChild className="w-full">
+                    <Link href={`/book/${practitioner.id}`}>
+                      Book Appointment
+                    </Link>
+                  </Button>
+                </Card>
+              ))}
+            </div>
+          )}
         </div>
       </section>
 

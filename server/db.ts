@@ -174,6 +174,38 @@ function getMockPractitioner(id: number) {
   return mockPractitioners.find(p => p.id === id);
 }
 
+function getMockPractitioners() {
+  return [
+    {
+      id: 1,
+      name: "Dr. Sarah Johnson",
+      email: "sarah@example.com",
+      description: "Clinical Psychologist",
+      hourlyRate: 8000,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    },
+    {
+      id: 2,
+      name: "Dr. Michael Chen",
+      email: "michael@example.com",
+      description: "Therapist",
+      hourlyRate: 7500,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    },
+    {
+      id: 3,
+      name: "Emma Wilson",
+      email: "emma@example.com",
+      description: "Counselor",
+      hourlyRate: 6000,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    },
+  ];
+}
+
 export async function createBooking(booking: InsertBooking) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");

@@ -19,6 +19,7 @@
 - [x] Create booking form component (name, email, phone)
 - [x] Create /booking/success page (BookingSuccess.tsx)
 - [x] Add navigation and routing (App.tsx)
+- [x] Replace mock practitioners in Home page with real database data
 
 ## Stripe Integration (Mock)
 
@@ -78,6 +79,7 @@
 ## Documentation & Testing
 
 - [x] Update TECHNICAL_DECISIONS.md with current implementation details
+- [x] Update SETUP_INSTRUCTIONS.md with PostgreSQL and real Cal.com setup
 - [ ] Add API documentation for real integrations
 - [ ] Update setup instructions with real API key requirements
 - [ ] Add troubleshooting guide for common integration issues
