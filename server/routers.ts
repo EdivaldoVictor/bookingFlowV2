@@ -1,0 +1,163 @@
+import { COOKIE_NAME } from "@shared/const";
+import { getSessionCookieOptions } from "./_core/cookies";
+import { systemRouter } from "./_core/systemRouter";
+import { publicProcedure, router } from "./_core/trpc";
+import { z } from "zod";
+import {
+  getPractitioner,
+  createBooking,
+  getBookingByStripeSessionId,
+  updateBookingStatus,
+  checkBookingConflict,
+  updateBookingWithStripeData,
+} from "./db";
+import { getAvailabilityForPractitioner } from "./services/availability";
+import { createCheckoutSession } from "./services/stripe";
+
+export const appRouter = router({
+  // if you need to use socket.io, read and register route in server/_core/index.ts, all api should start with '/api/' so that the gateway can route correctly
+  system: systemRouter,
+  auth: router({
+    me: publicProcedure.query(opts => opts.ctx.user),
+    logout: publicProcedure.mutation(({ ctx }) => {
+      const cookieOptions = getSessionCookieOptions(ctx.req);
+      ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
+      return {
+        success: true,
+      } as const;
+    }),
+  }),
+
+  // Booking system routers
+  bookings: router({
+    /**
+     * Get availability for a practitioner
+     * Returns time slots for the next 7-14 days
+     */
+    getAvailability: publicProcedure
+      .input(z.object({ practitionerId: z.number() }))
+      .query(async ({ input }) => {
+        console.log(
+          `[Router] getAvailability called with practitionerId: ${input.practitionerId}`
+        );
+
+        const practitioner = await getPractitioner(input.practitionerId);
+        console.log(`[Router] Practitioner found:`, practitioner);
+
+        if (!practitioner) {
+          throw new Error("Practitioner not found");
+        }
+
+        console.log(`[Router] Calling getAvailabilityForPractitioner...`);
+        const slots = await getAvailabilityForPractitioner(
+          input.practitionerId
+        );
+        console.log(
+          `[Router] Got ${slots.length} slots from availability service`
+        );
+
+        const availableSlots = slots.filter(s => s.available);
+        console.log(
+          `[Router] Filtered to ${availableSlots.length} available slots`
+        );
+
+        return {
+          practitioner,
+          slots: availableSlots,
+        };
+      }),
+
+    /**
+     * Create a new booking and generate Stripe checkout session
+     */
+    createBooking: publicProcedure
+      .input(
+        z.object({
+          practitionerId: z.number(),
+          clientName: z.string().min(1),
+          clientEmail: z.string().email(),
+          clientPhone: z.string().min(1),
+          bookingTime: z.string().datetime(),
+        })
+      )
+      .mutation(async ({ input }) => {
+        const practitioner = await getPractitioner(input.practitionerId);
+        if (!practitioner) {
+          throw new Error("Practitioner not found");
+        }
+
+        // Check for booking conflicts at the same time slot
+        const bookingTime = new Date(input.bookingTime);
+        const existingBooking = await checkBookingConflict(
+          input.practitionerId,
+          bookingTime
+        );
+        if (existingBooking) {
+          throw new Error(
+            "This time slot is already booked. Please select another time."
+          );
+        }
+
+        // Create booking in database with pending status
+        const booking = await createBooking({
+          practitionerId: input.practitionerId,
+          clientName: input.clientName,
+          clientEmail: input.clientEmail,
+          clientPhone: input.clientPhone,
+          bookingTime: new Date(input.bookingTime),
+          status: "pending",
+          amount: practitioner.hourlyRate,
+        });
+
+        if (!booking || !booking.id) {
+          throw new Error("Failed to create booking");
+        }
+
+        // Create real Stripe checkout session
+        const checkoutSession = await createCheckoutSession({
+          amount: practitioner.hourlyRate,
+          currency: "GBP",
+          clientEmail: input.clientEmail,
+          clientName: input.clientName,
+          bookingId: booking.id,
+        });
+
+        // Update booking with Stripe session ID
+        await updateBookingWithStripeData(booking.id, checkoutSession.id, "");
+
+        return {
+          bookingId: booking.id,
+          checkoutUrl: checkoutSession.url,
+          amount: practitioner.hourlyRate,
+        };
+      }),
+
+    /**
+     * Confirm booking after successful payment
+     * Called by the webhook handler
+     */
+    confirmBooking: publicProcedure
+      .input(
+        z.object({
+          stripeSessionId: z.string(),
+        })
+      )
+      .mutation(async ({ input }) => {
+        const booking = await getBookingByStripeSessionId(
+          input.stripeSessionId
+        );
+        if (!booking) {
+          throw new Error("Booking not found");
+        }
+
+        await updateBookingStatus(booking.id, "confirmed");
+
+        return {
+          bookingId: booking.id,
+          status: "confirmed",
+        };
+      }),
+  }),
+});
+
+export type AppRouter = typeof appRouter;
