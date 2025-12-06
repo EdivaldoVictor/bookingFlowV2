@@ -50,8 +50,8 @@ async function getCalComAvailability(
 
   try {
     // Map practitioner ID to Cal.com user/event type
-    // In production, you'd have a mapping table in your database
-    calComUserId = process.env.CALCOM_USER_ID_1;
+    // Using single CALCOM_USER_ID for all practitioners, each with their own event type
+    calComUserId = process.env.CALCOM_USER_ID;
     eventTypeId = process.env[`CALCOM_EVENT_TYPE_${practitionerId}`];
 
     if (!calComUserId || !eventTypeId) {
@@ -271,7 +271,8 @@ export async function createCalComBooking(bookingData: {
 
   try {
     // Get the correct userId and eventTypeId for this practitioner
-    const calComUserId = process.env.CALCOM_USER_ID_1;
+    // Using single CALCOM_USER_ID for all practitioners, each with their own event type
+    const calComUserId = process.env.CALCOM_USER_ID;
     const eventTypeId = process.env[`CALCOM_EVENT_TYPE_${bookingData.practitionerId}`];
 
     if (!calComUserId || !eventTypeId) {
@@ -297,6 +298,8 @@ export async function createCalComBooking(bookingData: {
     };
 
     console.log(`[Cal.com] Creating booking with payload:`, bookingPayload);
+    console.log(`[Cal.com] Request URL: ${calComUrl}/bookings`);
+    console.log(`[Cal.com] Using API Key: ${apiKey.substring(0, 20)}...`);
 
     // Create the booking via Cal.com API
     const response = await axios.post(`${calComUrl}/bookings`, bookingPayload, {
@@ -321,13 +324,28 @@ export async function createCalComBooking(bookingData: {
     if (error.response) {
       const status = error.response.status;
       const errorData = error.response.data;
+      const responseHeaders = error.response.headers;
 
       console.error(`[Cal.com] API Error ${status}:`, errorData);
+      console.error(`[Cal.com] Response headers:`, responseHeaders);
+      console.error(`[Cal.com] Request URL was: ${error.config?.url}`);
+      console.error(`[Cal.com] Request method: ${error.config?.method}`);
+      console.error(`[Cal.com] Request payload:`, JSON.stringify(error.config?.data, null, 2));
+
+      if (status === 401) {
+        console.error(`[Cal.com] Unauthorized - Possible causes:`);
+        console.error(`  - API key may be invalid or expired`);
+        console.error(`  - API key may not have write permissions`);
+        console.error(`  - Authentication format may be incorrect`);
+        console.error(`  - Check Cal.com Dashboard > Settings > Developer > API Keys`);
+        return { 
+          success: false, 
+          error: `Unauthorized (401): ${errorData?.message || 'Check API key permissions'}` 
+        };
+      }
 
       if (status === 400) {
-        return { success: false, error: "Invalid booking data or time conflict" };
-      } else if (status === 401) {
-        return { success: false, error: "API key invalid or expired" };
+        return { success: false, error: `Bad Request (400): ${errorData?.message || 'Invalid booking data or time conflict'}` };
       } else if (status === 404) {
         return { success: false, error: "Event type or user not found" };
       } else if (status === 409) {

@@ -65,23 +65,19 @@ STRIPE_WEBHOOK_SECRET=whsec_... # ⚠️ Precisa de secret real
 
 **Status:** Código está pronto, só falta configurar as chaves reais do Stripe.
 
-#### 2. **Cal.com - Unificar USER_ID** ⚠️
-**Problema:** Código ainda usa `CALCOM_USER_ID_1` ao invés de `CALCOM_USER_ID` único.
+#### 2. **Cal.com - Unificar USER_ID** ✅ RESOLVIDO
+**Status:** Código atualizado para usar `CALCOM_USER_ID` único para todos os practitioners.
 
-**Arquivos afetados:**
-- `server/services/availability.ts` (linhas 54, 274)
+**Mudanças:**
+- `server/services/availability.ts` - Agora usa `process.env.CALCOM_USER_ID`
+- Arquitetura alinhada com decisão de usar conta única
 
-**Solução:** Mudar para usar `CALCOM_USER_ID` único para todos os practitioners.
+#### 3. **Webhook - Integração com Cal.com** ✅ RESOLVIDO
+**Status:** Webhook agora cria eventos no Cal.com automaticamente após pagamento confirmado.
 
-#### 3. **Webhook - Integração com Cal.com** ⚠️
-**Problema:** `webhooks.ts` tem TODO comentado:
-```typescript
-// TODO: Create Cal.com booking
-```
-
-**Status:** Já implementado em `routers.ts` no `confirmBooking`, mas webhook não está chamando.
-
-**Solução:** Integrar criação do Cal.com booking no webhook handler.
+**Mudanças:**
+- `server/_core/webhooks.ts` - Integrado `createCalComBooking` no handler
+- Fluxo completo: Stripe → Webhook → Cal.com → Confirmação
 
 ---
 
@@ -122,13 +118,13 @@ calComEventId: varchar("calComEventId", { length: 255 }),
   - [ ] Adicionar ao `.env`
   - [ ] Testar checkout real
 
-- [ ] **Unificar Cal.com USER_ID:**
-  - [ ] Mudar `CALCOM_USER_ID_1` para `CALCOM_USER_ID` no código
-  - [ ] Atualizar `.env` com `CALCOM_USER_ID` único
+- [x] **Unificar Cal.com USER_ID:** ✅ COMPLETO
+  - [x] Mudar `CALCOM_USER_ID_1` para `CALCOM_USER_ID` no código
+  - [ ] Atualizar `.env` com `CALCOM_USER_ID` único (usuário precisa fazer)
   - [ ] Testar disponibilidade
 
-- [ ] **Integrar Cal.com no Webhook:**
-  - [ ] Chamar `createCalComBooking` no webhook handler
+- [x] **Integrar Cal.com no Webhook:** ✅ COMPLETO
+  - [x] Chamar `createCalComBooking` no webhook handler
   - [ ] Testar fluxo completo
 
 ### **Melhorias (2-3 horas)**
@@ -152,17 +148,19 @@ calComEventId: varchar("calComEventId", { length: 255 }),
 
 ### **Status Atual:**
 - ✅ **Código:** 100% implementado e funcional
-- ⚠️ **Configuração:** 70% - Falta Stripe keys e ajuste Cal.com
+- ⚠️ **Configuração:** 85% - Falta Stripe keys e atualizar .env com CALCOM_USER_ID
 - ✅ **Documentação:** 100% completa
 - ✅ **Testes:** 17/17 passando
+- ✅ **Integrações:** Cal.com e Stripe completamente integrados no código
 
 ### **Próximos Passos Críticos:**
 1. **Configurar Stripe keys** (15 min) - 🔴 CRÍTICO
-2. **Unificar CALCOM_USER_ID** (5 min) - 🟡 IMPORTANTE
-3. **Integrar Cal.com no webhook** (10 min) - 🟡 IMPORTANTE
+2. ~~**Unificar CALCOM_USER_ID**~~ ✅ COMPLETO
+3. ~~**Integrar Cal.com no webhook**~~ ✅ COMPLETO
+4. **Atualizar .env com CALCOM_USER_ID** (2 min) - 🟡 IMPORTANTE
 
 ### **Tempo Estimado para Produção:**
-- **Mínimo (só crítico):** 30 minutos
+- **Mínimo (só crítico):** 15-20 minutos (só configurar Stripe keys)
 - **Recomendado (com melhorias):** 3-4 horas
 
 ---
@@ -187,13 +185,13 @@ O projeto está **95% completo** e muito bem arquitetado! O código está de alt
    - TODO diz "Stripe Mock" mas código é REAL
    - TODO precisa ser atualizado
 
-2. **Webhook vs Router:**
-   - Cal.com booking criado em `routers.ts` mas não em `webhooks.ts`
-   - Webhook deveria ser a fonte única de verdade
+2. ~~**Webhook vs Router:**~~ ✅ RESOLVIDO
+   - Cal.com booking agora criado em ambos os lugares
+   - Webhook é a fonte primária, router mantém compatibilidade
 
-3. **Cal.com USER_ID:**
-   - Discussão sobre usar único, mas código ainda usa `_1`
-   - Precisa alinhar implementação com decisão arquitetural
+3. ~~**Cal.com USER_ID:**~~ ✅ RESOLVIDO
+   - Código atualizado para usar `CALCOM_USER_ID` único
+   - Implementação alinhada com decisão arquitetural
 
 ---
 

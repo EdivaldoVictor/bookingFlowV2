@@ -191,9 +191,8 @@ vite-express-booking/
 
 1. Obter chaves de teste em https://dashboard.stripe.com
 2. Adicionar `STRIPE_SECRET_KEY` e `STRIPE_WEBHOOK_SECRET` ao `.env`
-3. Substituir `server/services/stripe.ts` mock por implementação real
-4. Configurar webhook endpoint para confirmação de pagamentos
-5. Seguir guia em `TECHNICAL_DECISIONS.md` Seção 3
+3. Configurar Stripe CLI para testar webhooks localmente
+4. Seguir guia completo em `STRIPE_WEBHOOK_TESTING.md`
 
 ### Deploy para Produção
 

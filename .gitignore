@@ -105,3 +105,6 @@ temp/
 *.db
 *.sqlite
 *.sqlite3
+
+# Stripe CLI binary (should be in PATH, not in project)
+stripe

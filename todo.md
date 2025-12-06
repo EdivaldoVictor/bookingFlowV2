@@ -21,11 +21,13 @@
 - [x] Add navigation and routing (App.tsx)
 - [x] Replace mock practitioners in Home page with real database data
 
-## Stripe Integration (Mock)
+## Stripe Integration (Real Implementation) ✅
 
-- [x] Setup mock Stripe checkout session creation (server/services/stripe.ts)
-- [x] Add webhook handler for payment confirmation (tRPC: bookings.confirmBooking)
-- [x] Document how to integrate real Stripe (TECHNICAL_DECISIONS.md)
+- [x] Setup real Stripe checkout session creation (server/services/stripe.ts)
+- [x] Add webhook handler for payment confirmation with signature validation
+- [x] Implement refund functionality
+- [x] Document Stripe integration (TECHNICAL_DECISIONS.md)
+- [ ] Configure real Stripe API keys in production environment
 
 ## Testing & Documentation
 
@@ -48,15 +50,15 @@
 - [x] Add proper error handling and logging for Cal.com API calls
 - [x] Test real Cal.com API connection (working with userId: 1967202, eventTypeId: 4071936)
 
-## Stripe Real Integration (HIGH PRIORITY)
+## Stripe Real Integration ✅ (Código Completo - Falta Config)
 
-- [ ] Replace mock Stripe service with real Stripe API calls (server/services/stripe.ts)
-- [ ] Configure real Stripe webhook endpoint for payment confirmation
-- [ ] Update environment variables for real Stripe keys (STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET)
-- [ ] Implement proper Stripe checkout session creation with real payment processing
-- [ ] Add Stripe webhook signature verification
-- [ ] Test real payment flow end-to-end
-- [ ] Update booking status on successful payment via webhook
+- [x] Replace mock Stripe service with real Stripe API calls (server/services/stripe.ts) ✅
+- [x] Configure real Stripe webhook endpoint for payment confirmation ✅
+- [x] Implement proper Stripe checkout session creation with real payment processing ✅
+- [x] Add Stripe webhook signature verification ✅
+- [x] Update booking status on successful payment via webhook ✅
+- [ ] Configure real Stripe keys in production (STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET)
+- [ ] Test real payment flow end-to-end with actual Stripe account
 
 ## Cal.com Booking Integration ✅
 
@@ -68,6 +70,8 @@
 
 ## Code Cleanup & Optimization
 
+- [x] Unify CALCOM_USER_ID to use single user ID for all practitioners
+- [x] Integrate Cal.com booking creation in webhook handler
 - [ ] Remove mock data functions from availability.ts (keep only as fallback)
 - [ ] Update tests to work with real APIs (mock external API calls)
 - [ ] Add environment variable validation for required API keys

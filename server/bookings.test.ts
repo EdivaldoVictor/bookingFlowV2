@@ -104,6 +104,13 @@ vi.mock("./services/availability", () => ({
       available: true,
     },
   ]),
+  createCalComBooking: vi.fn(async () => ({
+    success: true,
+    eventId: "mock-calcom-event-id",
+  })),
+  cancelCalComBooking: vi.fn(async () => ({
+    success: true,
+  })),
 }));
 
 /**

@@ -103,6 +103,27 @@ export default function BookingPage({ practitionerId }: BookingPageProps) {
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
+  // Create booking mutation
+  const createBookingMutation = trpc.bookings.createBooking.useMutation({
+    onSuccess: (data) => {
+      console.log("[Booking] Booking created successfully:", data);
+      toast.success("Redirecting to payment...");
+      
+      // Redirect to Stripe checkout
+      if (data.checkoutUrl) {
+        window.location.href = data.checkoutUrl;
+      } else {
+        toast.error("Checkout URL not received. Please try again.");
+        setIsSubmitting(false);
+      }
+    },
+    onError: (error) => {
+      console.error("[Booking] Error creating booking:", error);
+      toast.error(error.message || "Failed to create booking. Please try again.");
+      setIsSubmitting(false);
+    },
+  });
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -128,22 +149,34 @@ export default function BookingPage({ practitionerId }: BookingPageProps) {
       );
       if (!selectedSlotData) {
         toast.error("Selected slot not found");
+        setIsSubmitting(false);
         return;
       }
 
-      // For demo purposes, simulate successful booking
-      toast.success("Booking created successfully!");
-      navigate(`/booking/success?bookingId=demo-${Date.now()}`);
+      // Create booking via tRPC mutation
+      console.log("[Booking] Creating booking with data:", {
+        practitionerId,
+        clientName: formData.clientName,
+        clientEmail: formData.clientEmail,
+        clientPhone: formData.clientPhone,
+        bookingTime: selectedSlotData.startTime.toISOString(),
+      });
+
+      await createBookingMutation.mutateAsync({
+        practitionerId,
+        clientName: formData.clientName,
+        clientEmail: formData.clientEmail,
+        clientPhone: formData.clientPhone,
+        bookingTime: selectedSlotData.startTime.toISOString(),
+      });
+
+      // Note: onSuccess handler will redirect to Stripe checkout
+      // Don't set isSubmitting to false here as we're redirecting
     } catch (error) {
-      toast.error("Failed to create booking. Please try again.");
-      console.error("Booking error:", error);
-    } finally {
-      setIsSubmitting(false);
+      console.error("[Booking] Booking error:", error);
+      // Error is handled by onError callback
     }
   };
-
-  // Create booking mutation
-  const createBookingMutation = trpc.bookings.createBooking.useMutation();
 
   if (isLoading) {
     return (
@@ -306,19 +339,25 @@ export default function BookingPage({ practitionerId }: BookingPageProps) {
 
             <Button
               type="submit"
-              disabled={!selectedSlot || isSubmitting}
+              disabled={!selectedSlot || isSubmitting || createBookingMutation.isPending}
               className="w-full"
               size="lg"
             >
-              {isSubmitting ? (
+              {isSubmitting || createBookingMutation.isPending ? (
                 <>
                   <Loader2 className="mr-2 w-4 h-4 animate-spin" />
-                  Processing...
+                  {createBookingMutation.isPending ? "Creating booking..." : "Processing..."}
                 </>
               ) : (
                 `Book Now - £${(finalAvailabilityData.practitioner.hourlyRate / 100).toFixed(2)}`
               )}
             </Button>
+            
+            {createBookingMutation.isError && (
+              <p className="text-sm text-red-600 mt-2">
+                {createBookingMutation.error?.message || "An error occurred"}
+              </p>
+            )}
           </form>
         </Card>
       </div>

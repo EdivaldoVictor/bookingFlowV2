@@ -130,6 +130,7 @@ export const appRouter = router({
         }
 
         // Create booking in database with pending status
+        console.log(`[Booking] Creating booking for practitioner ${input.practitionerId}`);
         const booking = await createBooking({
           practitionerId: input.practitionerId,
           clientName: input.clientName,
@@ -144,7 +145,10 @@ export const appRouter = router({
           throw new Error("Failed to create booking");
         }
 
+        console.log(`[Booking] Booking ${booking.id} created with status: pending`);
+
         // Create real Stripe checkout session
+        console.log(`[Booking] Creating Stripe checkout session for booking ${booking.id}`);
         const checkoutSession = await createCheckoutSession({
           amount: practitioner.hourlyRate,
           currency: "GBP",
@@ -153,8 +157,13 @@ export const appRouter = router({
           bookingId: booking.id,
         });
 
+        console.log(`[Booking] Stripe checkout session created: ${checkoutSession.id}`);
+
         // Update booking with Stripe session ID
         await updateBookingWithStripeData(booking.id, checkoutSession.id, "");
+
+        console.log(`[Booking] Booking ${booking.id} updated with Stripe session ID`);
+        console.log(`[Booking] Checkout URL: ${checkoutSession.url}`);
 
         return {
           bookingId: booking.id,
@@ -218,6 +227,32 @@ export const appRouter = router({
           bookingId: booking.id,
           status: "confirmed",
         };
+      }),
+
+    /**
+     * Get booking details by ID
+     */
+    getBooking: publicProcedure
+      .input(z.object({ bookingId: z.number() }))
+      .query(async ({ input }) => {
+        const booking = await getBooking(input.bookingId);
+        if (!booking) {
+          throw new Error("Booking not found");
+        }
+        return booking;
+      }),
+
+    /**
+     * Get booking by Stripe session ID
+     */
+    getBookingBySessionId: publicProcedure
+      .input(z.object({ sessionId: z.string() }))
+      .query(async ({ input }) => {
+        const booking = await getBookingByStripeSessionId(input.sessionId);
+        if (!booking) {
+          throw new Error("Booking not found");
+        }
+        return booking;
       }),
 
     /**
