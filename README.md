@@ -10,7 +10,8 @@ A modern booking flow application built with **Vite + React + Express + tRPC**, 
 
 - Node.js 18+ and pnpm
 - PostgreSQL database (Neon recommended - connection provided)
-- Stripe Test Mode account (optional, mock implementation included)
+- Stripe account with API keys (for payment processing)
+- Cal.com account with API key (for availability and booking management)
 
 ### Installation
 
@@ -66,9 +67,10 @@ vite-express-booking/
 - **Real Availability:** Fetch actual availability from Cal.com practitioner calendars
 - **Time Slot Selection:** View available appointments for the next 14 days
 - **Booking Form:** Collect client name, email, and phone number
-- **Payment Processing:** Mock Stripe integration (ready for real Stripe)
-- **Automatic Event Creation:** Creates meetings in Cal.com upon payment confirmation
-- **Confirmation Page:** Display booking ID and confirmation details
+- **Real Stripe Payment:** Complete Stripe checkout integration with webhook processing
+- **Automatic Event Creation:** Creates meetings in Cal.com upon payment confirmation via webhook
+- **Confirmation Page:** Display booking status with real-time verification
+- **Webhook Integration:** Automatic booking confirmation after successful payment
 
 ### Technical Features
 
@@ -76,9 +78,11 @@ vite-express-booking/
 - **Modern Frontend:** Vite + React with hot module replacement
 - **Express Backend:** Fast Express.js server with tRPC API
 - **Database Layer:** PostgreSQL with Drizzle ORM (Neon hosted)
-- **Smart Fallbacks:** Cal.com integration with automatic mock fallback
+- **Real Cal.com Integration:** Live API integration with automatic event creation
+- **Real Stripe Integration:** Complete payment processing with webhook verification
+- **Webhook Processing:** Automatic booking confirmation via Stripe webhooks
 - **Event Management:** Automatic Cal.com meeting creation and cancellation
-- **Payment Simulation:** Stripe checkout mock for seamless development
+- **Frontend-Backend Sync:** Real-time booking status verification
 - **Responsive UI:** Mobile-first design with Tailwind CSS
 - **Auto Database Setup:** One-command database initialization
 
@@ -232,16 +236,18 @@ Create a `.env.local` file with:
 # Database (PostgreSQL - Neon recommended)
 DATABASE_URL=postgresql://user:password@host:5432/database?sslmode=require
 
-# Cal.com Integration (optional - mock works without these)
+# Cal.com Integration (required for availability and event creation)
 CALCOM_API_KEY=cal_live_...
 CALCOM_API_URL=https://api.cal.com/v1
-CALCOM_USER_ID_1=1967202
-CALCOM_EVENT_TYPE_1=4071936
+CALCOM_USER_ID=1967202  # Single user ID for all practitioners
+CALCOM_EVENT_TYPE_1=4071936  # Event type for practitioner 1
+CALCOM_EVENT_TYPE_2=...  # Event type for practitioner 2
+CALCOM_EVENT_TYPE_3=...  # Event type for practitioner 3
 
-# Stripe (optional - mock implementation works without these)
-STRIPE_SECRET_KEY=sk_test_...
-NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_test_...
-STRIPE_WEBHOOK_SECRET=whsec_test_...
+# Stripe Integration (required for payment processing)
+STRIPE_SECRET_KEY=sk_test_...  # From Stripe Dashboard
+STRIPE_WEBHOOK_SECRET=whsec_...  # From 'stripe listen' or Dashboard
+BASE_URL=http://localhost:3000  # For redirect URLs
 
 # OAuth (Manus - optional)
 VITE_OAUTH_PORTAL_URL=https://...
@@ -445,8 +451,8 @@ Starts the Express server that serves the built static files and handles API req
 
 1. Set all environment variables on production server
 2. Database is automatically set up on first run: `pnpm db:reset`
-3. Configure Stripe webhook URL (optional - mock works without it)
-4. Configure Cal.com API keys (optional - mock works without it)
+3. Configure Stripe webhook URL in Stripe Dashboard for production
+4. Configure Cal.com API keys for availability and event creation
 5. Set up monitoring and error tracking
 
 See `TECHNICAL_DECISIONS.md` Section 10 for deployment checklist.
@@ -477,6 +483,9 @@ For questions or issues, please refer to the technical documentation or contact 
 **Architecture:** Vite (Frontend) + Express (Backend) + tRPC (API) + PostgreSQL (Database)
 
 **What's New:**
+- Real Stripe integration with webhook processing
+- Frontend-Backend integration with automatic booking confirmation
+- Real Cal.com integration with automatic event creation
 - Hybrid Vite + Express architecture for optimal developer experience
 - PostgreSQL support with automatic schema management
 - Real Cal.com integration with intelligent fallbacks

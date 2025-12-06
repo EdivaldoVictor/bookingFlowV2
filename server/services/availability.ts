@@ -327,22 +327,6 @@ export async function createCalComBooking(bookingData: {
       const responseHeaders = error.response.headers;
 
       console.error(`[Cal.com] API Error ${status}:`, errorData);
-      console.error(`[Cal.com] Response headers:`, responseHeaders);
-      console.error(`[Cal.com] Request URL was: ${error.config?.url}`);
-      console.error(`[Cal.com] Request method: ${error.config?.method}`);
-      console.error(`[Cal.com] Request payload:`, JSON.stringify(error.config?.data, null, 2));
-
-      if (status === 401) {
-        console.error(`[Cal.com] Unauthorized - Possible causes:`);
-        console.error(`  - API key may be invalid or expired`);
-        console.error(`  - API key may not have write permissions`);
-        console.error(`  - Authentication format may be incorrect`);
-        console.error(`  - Check Cal.com Dashboard > Settings > Developer > API Keys`);
-        return { 
-          success: false, 
-          error: `Unauthorized (401): ${errorData?.message || 'Check API key permissions'}` 
-        };
-      }
 
       if (status === 400) {
         return { success: false, error: `Bad Request (400): ${errorData?.message || 'Invalid booking data or time conflict'}` };
