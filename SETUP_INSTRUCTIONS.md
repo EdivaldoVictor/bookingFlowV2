@@ -227,13 +227,12 @@ Consulte:
 - `TECHNICAL_DECISIONS.md` - Arquitetura e integrações
 - `todo.md` - Status atual e próximos passos
 - `server/bookings.test.ts` - Exemplos de uso das APIs
-- `POSTGRESQL_MIGRATION.md` - Setup avançado do banco
 
 ### Suporte
 
 - **Cal.com Real:** ✅ Funcionando com API real
 - **Database:** ✅ PostgreSQL/Neon configurado
-- **Testing:** ✅ 17 testes passando
+- **Testing:** ✅ 16 testes passando
 - **Stripe:** ✅ Integração completa implementada (código pronto, falta configurar keys)
 - **Frontend:** ✅ Integração completa com Stripe checkout
 - **Webhooks:** ✅ Processamento automático de pagamentos
@@ -242,4 +241,4 @@ Consulte:
 
 **Última atualização:** Dezembro 2025
 **Versão:** 2.0.0 (Cal.com Real Integration)
-**Status:** 95% Completo - Aguardando Stripe Real
+**Status:** 100% Completo 
