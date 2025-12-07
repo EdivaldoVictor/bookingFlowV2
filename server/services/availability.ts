@@ -257,7 +257,7 @@ export async function createCalComBooking(bookingData: {
   startTime: Date;
   endTime: Date;
   title?: string;
-  description?: string;
+  timeZone?: string;
 }): Promise<{ success: boolean; eventId?: string; error?: string }> {
   const apiKey = process.env.CALCOM_API_KEY;
   const calComUrl = process.env.CALCOM_API_URL || "https://api.cal.com/v1";
@@ -282,33 +282,43 @@ export async function createCalComBooking(bookingData: {
 
     // Prepare the booking data for Cal.com API
     const bookingPayload = {
-      title: bookingData.title || `Consultation with ${bookingData.clientName}`,
-      description: bookingData.description || `Booking created via BookingFlow`,
-      startTime: bookingData.startTime.toISOString(),
-      endTime: bookingData.endTime.toISOString(),
-      attendees: [
-        {
-          email: bookingData.clientEmail,
-          name: bookingData.clientName,
-          phone: bookingData.clientPhone,
-        }
-      ],
-      eventTypeId: parseInt(eventTypeId),
-      userId: parseInt(calComUserId),
+      eventTypeId: Number(eventTypeId),
+      start: bookingData.startTime.toISOString(),
+      end: bookingData.endTime.toISOString(),
+
+      responses: {
+        name: bookingData.clientName,
+        email: bookingData.clientEmail,
+        smsReminderNumber: "",
+        location: {
+          value: "userPhone",
+          optionValue: bookingData.clientPhone || "",
+        },
+      },
+
+      timeZone: bookingData.timeZone || "America/Recife",
+      language: "en",
+      title: bookingData.title || "Booking",
+      description: null,
+      status: "PENDING",
+      metadata: {},
     };
+
 
     console.log(`[Cal.com] Creating booking with payload:`, bookingPayload);
     console.log(`[Cal.com] Request URL: ${calComUrl}/bookings`);
     console.log(`[Cal.com] Using API Key: ${apiKey.substring(0, 20)}...`);
 
     // Create the booking via Cal.com API
-    const response = await axios.post(`${calComUrl}/bookings`, bookingPayload, {
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      timeout: 10000, // 10 seconds timeout
-    });
+    const response = await axios.post(
+      `https://api.cal.com/v1/bookings?apiKey=${apiKey}`,
+      bookingPayload,
+      {
+        headers: {
+          "Content-Type": "application/json",
+        },
+      }
+    );
 
     console.log(`[Cal.com] Booking created successfully:`, response.data);
 
@@ -318,7 +328,7 @@ export async function createCalComBooking(bookingData: {
     };
 
   } catch (error: any) {
-    console.error("[Cal.com] Failed to create booking:", error);
+    console.error("[Cal.com] Failed to create booking:", error.response?.data || error);
 
     // Handle specific error types
     if (error.response) {
