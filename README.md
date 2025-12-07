@@ -219,6 +219,34 @@ User → Express → tRPC → DB/Cal/Stripe → Response
 * PostgreSQL parameterized queries
 * Proper webhook signature validation
 
+🧩 SOLID Principles in This Project
+
+This project follows SOLID to keep the architecture clean, modular, and scalable.
+
+S — Single Responsibility
+
+Each module has one job:
+
+tRPC routers are separated by domain (booking, availability, practitioner).
+
+External integrations (Cal.com, Stripe) live in isolated service modules.
+
+O — Open/Closed
+
+You can add new routers, procedures, or integrations without modifying existing logic thanks to the service-based structure.
+
+L — Liskov Substitution
+
+Service modules follow replaceable internal interfaces (e.g., scheduling provider, payment provider), allowing integrations to be swapped without breaking the app.
+
+I — Interface Segregation
+
+Routers are small and focused. Each service only exposes what is necessary — no bloated APIs.
+
+D — Dependency Inversion
+
+Routers depend on internal abstractions (services), not external SDKs. Stripe, Cal, and Prisma remain fully decoupled from business logic.
+
 ---
 
 ## 🚀 Deployment
