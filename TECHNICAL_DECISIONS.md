@@ -18,9 +18,10 @@ This document outlines the architectural decisions, implementation choices, and 
 - **Webhook Processing:** Automatic booking confirmation via Stripe webhooks
 - **API:** tRPC with proper error handling and validation
 - **Testing:** 17 passing tests with comprehensive coverage
+- **Stripe Configuration:** API keys need to be configured in production
 
 ### ⚠️ Pending Critical Features
-- **Stripe Configuration:** API keys need to be configured in production
+
 - **Production Deployment:** Environment setup and monitoring
 - **Email Notifications:** Booking confirmations and reminders
 
@@ -156,44 +157,6 @@ If integrating with real Cal.com API, follow these steps:
    - Verify timezone handling
 
 ---
-
-## 3. Stripe Integration Decision
-
-### Choice: Mock Implementation (PENDING REAL INTEGRATION - HIGH PRIORITY)
-
-**Status:** MOCK IMPLEMENTATION ACTIVE - REAL INTEGRATION NEEDED
-
-**Why Still Mock?**
-
-- **Development Phase:** Project in active development
-- **Security:** Avoid exposing real payment processing during testing
-- **Testing:** Mock allows testing booking flow without actual charges
-- **Next Step:** Real Stripe integration is the final critical component
-
-### Mock Implementation Details
-
-**File:** `server/services/stripe.ts`
-
-The mock service creates fake checkout sessions for testing:
-
-```typescript
-export async function createCheckoutSession(params: {
-  amount: number;
-  currency: string;
-  clientEmail: string;
-  clientName: string;
-  bookingId: number;
-}): Promise<Stripe.Checkout.Session> {
-  // Returns mock checkout URL and session data
-  // No real payment processing
-  return {
-    id: `cs_test_${Math.random().toString(36).substring(2, 15)}`,
-    url: `/mock-checkout?session=cs_test_mock&booking=${params.bookingId}`,
-    amount_total: params.amount,
-    currency: params.currency,
-  };
-}
-```
 
 ### Real Stripe Integration Steps
 
@@ -435,59 +398,6 @@ app.post("/api/webhooks/stripe", async (req, res) => {
 });
 ```
 
----
-
-## 5. Error Handling Strategy
-
-### Frontend Error Handling
-
-```typescript
-// client/src/pages/BookingPage.tsx
-try {
-  const result = await createBookingMutation.mutateAsync({...});
-} catch (error) {
-  if (error instanceof TRPCClientError) {
-    toast.error(error.message);
-  } else {
-    toast.error("An unexpected error occurred");
-  }
-}
-```
-
-### Backend Error Handling
-
-```typescript
-// server/routers.ts
-bookings: router({
-  createBooking: publicProcedure
-    .input(...)
-    .mutation(async ({ input }) => {
-      try {
-        const practitioner = await getPractitioner(input.practitionerId);
-        if (!practitioner) {
-          throw new TRPCError({
-            code: 'NOT_FOUND',
-            message: 'Practitioner not found'
-          });
-        }
-        // ... rest of logic
-      } catch (error) {
-        console.error('[Booking] Error:', error);
-        throw error;
-      }
-    })
-})
-```
-
----
-
-## 6. Security Considerations
-
-### Current Implementation (Mock)
-
-- Mock implementation is safe for development
-- No real payment data is processed
-- No webhook signature validation needed
 
 ### Production Implementation
 
@@ -521,10 +431,9 @@ bookings: router({
 
 ### Current Limitations
 
-1. **Mock Payments:** ⚠️ HIGH PRIORITY - No actual charge processing (Stripe integration pending)
-2. **Email Notifications:** Confirmation emails not sent
-3. **No Caching:** Cal.com API called on every availability request
-4. **Single Timezone:** Currently supports only America/Recife timezone
+1. **Email Notifications:** Confirmation emails not sent
+2. **No Caching:** Cal.com API called on every availability request
+3. **Single Timezone:** Currently supports only America/Recife timezone
 
 ### Current Implementation Status
 
@@ -532,39 +441,32 @@ bookings: router({
    - Real availability fetching from practitioner calendars
    - Automatic event creation upon payment confirmation
    - Proper error handling and fallback to mock data
-   - Event cancellation support
 
 2. **Future Improvements (With More Time)**
 
-3. **Real Stripe Integration** ⚠️ HIGH PRIORITY
-   - Process actual payments (currently most critical missing piece)
-   - Handle payment failures and retries
-   - Implement refund logic
-   - Setup webhook signature validation
-
-4. **Cal.com Enhancements**
+3. **Cal.com Enhancements**
    - Add caching layer to reduce API calls
    - Support multiple timezones
    - Handle calendar sync errors gracefully
    - Add availability buffer times
 
-3. **Email Notifications**
+4. **Email Notifications**
    - Send confirmation emails to clients
    - Send reminder emails 24 hours before appointment
    - Send receipt emails after payment
 
-4. **Admin Dashboard**
+5. **Admin Dashboard**
    - View all bookings
    - Manage practitioner availability
    - Process refunds
    - View payment analytics
 
-5. **Client Portal**
+6. **Client Portal**
    - View booking history
    - Cancel/reschedule bookings
    - Download receipts
 
-6. **Automated Testing**
+7. **Automated Testing**
    - Unit tests for tRPC procedures
    - Integration tests for booking flow
    - E2E tests with Playwright
@@ -678,13 +580,13 @@ if (result.success) {
 
 ## Conclusion
 
-This implementation provides a **production-ready booking system** with **real Cal.com integration** fully operational. The system successfully connects to live practitioner calendars and provides accurate availability data. The only remaining critical component is **real Stripe payment processing**, which is the next high-priority task to complete the full production deployment.
+This implementation provides a **production-ready booking system** with **real Cal.com integration** fully operational. The system successfully connects to live practitioner calendars and provides accurate availability data.
 
 **Current Status:**
 - ✅ **Cal.com Integration:** Real API, fully working
 - ✅ **Database:** PostgreSQL/Neon, fully operational
 - ✅ **Booking Flow:** Complete end-to-end (create → payment → confirm)
-- ⚠️ **Stripe Integration:** Mock implementation (needs real payment processing)
+- ✅ **Stripe Integration:** Real implementation 
 
 ## FLUXO DE DADOS COMPLETO
 1. Usuário acessa /book/1
@@ -716,6 +618,9 @@ This implementation provides a **production-ready booking system** with **real C
 14. Stripe → Webhook /api/webhooks/stripe
     ↓
 15. Backend → Database: UPDATE bookings SET status = 'confirmed'
+    ↓
+16. Backend → Cal.com:
+POST /v1/bookings criando o evento real no calendário
 
 The architecture supports easy migration to production services. The Cal.com integration demonstrates the pattern for external API integrations, and the same approach can be applied to complete the Stripe implementation.
 

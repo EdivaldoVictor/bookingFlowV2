@@ -112,9 +112,8 @@ async function handleStripeWebhook(req: Request, res: Response) {
             startTime: booking.bookingTime,
             endTime: endTime,
             title: `Consultation with ${practitioner.name}`,
-            description: `Booked via BookingFlow - Payment confirmed via Stripe`,
           });
-
+          
           if (calComResult.success) {
             console.log(`[Webhook] Cal.com event created: ${calComResult.eventId}`);
           } else {
