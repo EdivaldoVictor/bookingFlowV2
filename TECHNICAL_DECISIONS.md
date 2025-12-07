@@ -1,627 +1,251 @@
-# Technical Decisions Documentation
+# BookingFlow - Fast Appointment Booking with Payment
 
-## Overview
+A modern booking-flow application built with **Vite + React + Express + tRPC**, featuring real **Stripe payments** and **Cal.com availability + booking creation**.
 
-This document outlines the architectural decisions, implementation choices, and debugging strategies for the BookingFlow application—a 2-3 minute booking flow with Stripe payment integration.
+Complete a full booking flow in **2–3 minutes** with:
 
-## Project Status Summary
+* real-time availability
+* secure payments
+* automatic event creation
+* webhooks
+* PostgreSQL database
 
-**Last Updated:** December 2025
-**Version:** Production Ready (Stripe integration pending)
-
-### ✅ Completed Features
-- **Real Cal.com Integration:** Fully implemented and working with live API
-- **Real Stripe Integration:** Complete payment processing with webhook verification
-- **Database:** PostgreSQL with Drizzle ORM, hosted on Neon
-- **Booking System:** Complete CRUD operations with conflict detection
-- **Frontend:** React 19 + Tailwind CSS 4 with full booking flow and Stripe integration
-- **Webhook Processing:** Automatic booking confirmation via Stripe webhooks
-- **API:** tRPC with proper error handling and validation
-- **Testing:** 17 passing tests with comprehensive coverage
-- **Stripe Configuration:** API keys need to be configured in production
-
-### ⚠️ Pending Critical Features
-
-- **Production Deployment:** Environment setup and monitoring
-- **Email Notifications:** Booking confirmations and reminders
-
-### 🚀 Ready for Production
-- Cal.com API integration working perfectly
-- Database schema optimized for production
-- Error handling and logging implemented
-- Security measures in place for current scope
+> **Architecture:** Hybrid Vite + Express setup for the best development experience (HMR) and production-ready backend performance.
 
 ---
 
-## 1. Architecture Overview
+## 🚀 Quick Start (< 5 minutes)
 
-### Technology Stack
+### **Prerequisites**
 
-- **Frontend:** React 19 + Tailwind CSS 4 + shadcn/ui
-- **Backend:** Node.js + Express 4 + tRPC 11
-- **Database:** PostgreSQL (via Drizzle ORM + Neon)
-- **Payment:** Stripe (Real integration with webhook processing - CODE COMPLETE)
-- **Scheduling:** Real Cal.com API integration (fully implemented)
-- **Routing:** Wouter (lightweight client-side router)
+* Node.js 18+ and pnpm
+* PostgreSQL (Neon recommended)
+* Stripe account + API keys
+* Cal.com account + API key
 
-### Project Structure
+### **Installation**
+
+```bash
+pnpm install
+pnpm db:reset
+pnpm dev
+```
+
+App available at: **[http://localhost:3000](http://localhost:3000)**
+
+---
+
+## 📁 Project Structure
 
 ```
-nextjs-app-router-project/
-├── client/
+vite-express-booking/
+├── client/                           # Vite + React frontend
 │   └── src/
 │       ├── pages/
-│       │   ├── Home.tsx              # Landing page with practitioners from database
-│       │   ├── BookingPage.tsx       # Booking form with time slot selection
-│       │   └── BookingSuccess.tsx    # Confirmation page
-│       ├── App.tsx                   # Route configuration
-│       └── lib/trpc.ts               # tRPC client setup
-├── server/
+│       │   ├── Home.tsx
+│       │   ├── BookingPage.tsx
+│       │   └── BookingSuccess.tsx
+│       ├── App.tsx
+│       └── lib/trpc.ts
+├── server/                           # Express + tRPC backend
+│   ├── _core/
+│   │   ├── index.ts
+│   │   ├── vite.ts
+│   │   └── context.ts
 │   ├── routers.ts                    # tRPC procedures
-│   ├── db.ts                         # Database queries
+│   ├── db.ts                         # PostgreSQL + fallback
 │   └── services/
-│       ├── availability.ts           # Real Cal.com integration
-│       └── stripe.ts                 # Real Stripe integration
-├── drizzle/
-│   └── schema.ts                     # Database schema (users, practitioners, bookings)
-└── TECHNICAL_DECISIONS.md            # This file
+│       ├── availability.ts           # Cal.com integration
+│       └── stripe.ts                 # Stripe checkout + webhook
+├── scripts/db.ts                     # Full DB setup
+├── drizzle/                          # ORM schema + migration
+├── dist/                             # Production build output
+└── TECHNICAL_DECISIONS.md
 ```
 
 ---
 
-## 2. Cal.com Integration Decision
+## ⭐ Features
 
-### Choice: Real API Integration ✅
+### **Core Functionality**
 
-**Status:** FULLY IMPLEMENTED AND WORKING
+* Practitioner listing with prices
+* Real availability from Cal.com
+* 14-day slot selection
+* Booking form with details
+* Stripe real payment checkout
+* Webhook confirmation
+* Automatic Cal.com event creation
+* Confirmation page with real-time status
 
-**Why Real Integration?**
+### **Technical Features**
 
-- **Production Ready:** Real availability data from practitioner calendars
-- **Accurate Scheduling:** Prevents double-bookings and conflicts
-- **User Trust:** Clients see actual available times
-- **Scalable:** Supports multiple practitioners with different schedules
+* End-to-end **type safety** (tRPC + TypeScript)
+* Modern frontend: **Vite + React + Tailwind**
+* Backend: **Express + tRPC**
+* Database: **PostgreSQL + Drizzle**
+* Smart fallbacks when APIs fail
+* Full Stripe + Cal.com integration
+* Real-time sync between frontend and backend
+* One-command DB setup
 
-### Real Implementation Details
+---
 
-**File:** `server/services/availability.ts`
+## 📦 Available Scripts
 
-The real Cal.com integration fetches availability slots from the actual API:
-
-- **API Endpoint:** `https://api.cal.com/v1/availability`
-- **Authentication:** Bearer token with `CALCOM_API_KEY`
-- **Mapping:** Practitioner IDs mapped to Cal.com user IDs and event types
-- **Slot Generation:** Based on real working hours and busy slots
-- **Timezone:** Supports multiple timezones (currently America/Recife)
-- **Duration:** 14 days ahead availability
-
-**Environment Variables Required:**
 ```bash
-CALCOM_API_KEY=cal_live_e0a3714f1b10d5da9a7c5384777535e3
+pnpm dev
+pnpm build
+pnpm start
+pnpm db:reset
+pnpm db:setup
+pnpm db:seed
+pnpm check
+pnpm test
+```
+
+---
+
+## 🔌 API Routes (tRPC)
+
+All endpoints are available under **/api/trpc**.
+
+### **bookings.getAvailability**
+
+Returns practitioner info + time slots.
+
+### **bookings.createBooking**
+
+Creates DB record + Stripe checkout session.
+
+### **bookings.confirmBooking**
+
+Confirms booking after webhook.
+
+---
+
+## 🗄️ Database Schema (PostgreSQL)
+
+Two tables:
+
+* **practitioners**
+* **bookings**
+
+Schema includes: pricing, timestamps, statuses, Stripe IDs, and practitioner mapping.
+
+---
+
+## 🔧 Configuration
+
+Create `.env.local`:
+
+```env
+DATABASE_URL=...
+
+CALCOM_API_KEY=...
 CALCOM_API_URL=https://api.cal.com/v1
-CALCOM_USER_ID=1967202            # Single user ID for all practitioners
-CALCOM_EVENT_TYPE_1=4071936       # Event type for practitioner 1
-CALCOM_EVENT_TYPE_2=...           # Event type for practitioner 2
-CALCOM_EVENT_TYPE_3=...           # Event type for practitioner 3
+CALCOM_USER_ID=1967202
+CALCOM_EVENT_TYPE_1=4071936
+CALCOM_EVENT_TYPE_2=...
+
+STRIPE_SECRET_KEY=sk_test_...
+STRIPE_WEBHOOK_SECRET=whsec_...
+BASE_URL=http://localhost:3000
 ```
-
-**Current Working Configuration:**
-- Practitioner 1 → User ID: 1967202, Event Type: 4071936
-- Working Hours: 07:20 to 12:00 (Brazil timezone)
-- Available Days: Monday to Friday
-- Session Duration: 1 hour
-
-```typescript
-export async function getAvailabilityForPractitioner(
-  practitionerId: number
-): Promise<TimeSlot[]> {
-  // Fetches real availability from Cal.com API
-  // Falls back to mock data if API fails
-  const slots = await getCalComAvailability(practitionerId);
-  return slots;
-}
-```
-
-### Real Cal.com Integration Strategy
-
-If integrating with real Cal.com API, follow these steps:
-
-1. **Obtain API Credentials**
-   - Sign up at cal.com
-   - Generate API key from settings
-   - Store as environment variable: `CAL_COM_API_KEY`
-
-2. **Replace Mock Service**
-
-   ```typescript
-   // server/services/availability.ts
-   export async function getAvailabilityForPractitioner(
-     practitionerId: number
-   ) {
-     const response = await fetch(`https://api.cal.com/v1/availability`, {
-       headers: { Authorization: `Bearer ${process.env.CAL_COM_API_KEY}` },
-       body: JSON.stringify({ userId: practitionerId, dateFrom, dateTo }),
-     });
-     return response.json();
-   }
-   ```
-
-3. **Update tRPC Procedure**
-   - Change from sync `getAvailabilityForPractitioner()` to async
-   - Add error handling for API failures
-   - Implement caching to reduce API calls
-
-4. **Testing**
-   - Mock Cal.com responses in vitest
-   - Test rate limiting scenarios
-   - Verify timezone handling
 
 ---
 
-### Real Stripe Integration Steps
+## 🧩 Integration Guides
 
-1. **Setup Stripe Account**
-   - Create Stripe account at stripe.com
-   - Get API keys from Dashboard → Settings → API Keys
-   - Use **Test Mode** keys for development
+### Stripe
 
-2. **Install Stripe SDK**
+* real Stripe integration
+* Configure webhook
+* Validate events
 
-   ```bash
-   pnpm add stripe
-   ```
+### Cal.com
 
-3. **Update Environment Variables**
-
-   ```
-   STRIPE_SECRET_KEY=sk_test_...
-   NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_test_...
-   ```
-
-4. **Replace Mock Service**
-
-   ```typescript
-   // server/services/stripe.ts
-   import Stripe from 'stripe';
-
-   const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
-
-   export async function createCheckoutSession(params) {
-     return await stripe.checkout.sessions.create({
-       payment_method_types: ['card'],
-       line_items: [{ price_data: {...}, quantity: 1 }],
-       mode: 'payment',
-       success_url: `${baseUrl}/booking/success?session={CHECKOUT_SESSION_ID}`,
-       cancel_url: `${baseUrl}/book/${params.practitionerId}`,
-       metadata: { bookingId: params.bookingId }
-     });
-   }
-   ```
-
-5. **Webhook Signature Validation**
-   ```typescript
-   export function validateWebhookSignature(
-     payload: string,
-     signature: string
-   ): boolean {
-     return stripe.webhooks.constructEvent(
-       payload,
-       signature,
-       process.env.STRIPE_WEBHOOK_SECRET!
-     );
-   }
-   ```
+* Real availability
+* Map event types per practitioner
+* Automatic event creation after payment confirmation
+* Fallback when Cal.com is unreachable
 
 ---
 
-## 4. Stripe Integration Decision
+## 🧪 Testing
 
-### Choice: Real API Integration ✅
+### Manual
 
-**Status:** FULLY IMPLEMENTED AND WORKING
+* Book appointments end-to-end
+* Webhook confirmation
+* Availability fetching
 
-**Why Real Integration?**
+### API
 
-- **Production Ready:** Real payment processing with Stripe Checkout
-- **Webhook Verification:** Automatic booking confirmation after payment
-- **Security:** Signature validation ensures webhooks are from Stripe
-- **Scalable:** Supports multiple payment methods and currencies
+Use curl to test tRPC endpoints.
 
-### Real Implementation Details
+---
 
-**File:** `server/services/stripe.ts`
+## 🛠️ Troubleshooting
 
-The real Stripe integration includes:
+* Database connection errors
+* Missing environment vars
+* Stripe checkout failures
+* Cal.com "Invalid event length"
 
-- **Checkout Session Creation:** Creates real Stripe checkout sessions
-- **Webhook Processing:** Validates signatures and processes payment events
-- **Automatic Confirmation:** Confirms bookings automatically via webhook
-- **Cal.com Integration:** Creates Cal.com events after payment confirmation
+Full debugging guide in `TECHNICAL_DECISIONS.md`.
 
-**Environment Variables Required:**
-```bash
-STRIPE_SECRET_KEY=sk_test_...  # From Stripe Dashboard
-STRIPE_WEBHOOK_SECRET=whsec_...  # From 'stripe listen' or Dashboard
-BASE_URL=http://localhost:3000  # For redirect URLs
+---
+
+## 🏗️ Architecture Overview
+
+### Hybrid Architecture
+
+* **Dev mode:** Express + Vite HMR on the same port
+* **Prod mode:** Static frontend + Express API
+
+### Data Flow
+
+```
+User → Express → tRPC → DB/Cal/Stripe → Response
 ```
 
-**Frontend Integration:**
-- `BookingPage.tsx` creates booking and redirects to Stripe Checkout
-- `BookingSuccess.tsx` verifies booking status after payment
+---
 
-**Webhook Endpoint:**
-- `/api/webhooks/stripe` - Processes `checkout.session.completed` events
-- Automatically confirms booking and creates Cal.com event
+## 🔐 Security
+
+* Zod validation
+* Secure env vars
+* PostgreSQL parameterized queries
+* Proper webhook signature validation
 
 ---
 
-## 5. Debugging Strategy: Cal.com (Real) + Stripe (Real) Integration
-
-Current Status: Cal.com ✅ Real | Stripe ✅ Real
-
-If you inherit this project with Cal.com real integration working and need to complete Stripe, follow these 10 steps:
-
-### Step 1: Verify Environment Configuration
+## 🚀 Deployment
 
 ```bash
-# Check all required environment variables are set
-echo $CAL_COM_API_URL
-echo $CAL_COM_API_KEY
-echo $STRIPE_SECRET_KEY
-echo $STRIPE_WEBHOOK_SECRET
+pnpm build
+NODE_ENV=production pnpm start
 ```
 
-### Step 2: Test Cal.com API Connectivity
-
-```bash
-# Test availability endpoint
-curl -X GET "https://cal.com/api/v1/availability" \
-  -H "Authorization: Bearer $CAL_COM_API_KEY" \
-  -H "Content-Type: application/json"
-```
-
-### Step 3: Check Database State
-
-```sql
--- Verify bookings table structure
-SELECT * FROM bookings LIMIT 1;
-
--- Check for pending bookings
-SELECT * FROM bookings WHERE status = 'pending' AND createdAt > NOW() - INTERVAL 1 HOUR;
-```
-
-### Step 4: Enable Detailed Logging
-
-```typescript
-// server/services/availability.ts
-export async function getAvailabilityForPractitioner(id: number) {
-  console.log(`[Cal.com] Fetching availability for practitioner ${id}`);
-  try {
-    const response = await fetch(...);
-    console.log(`[Cal.com] Response status: ${response.status}`);
-    return response.json();
-  } catch (error) {
-    console.error(`[Cal.com] Error:`, error);
-    throw error;
-  }
-}
-```
-
-### Step 5: Test Stripe Webhook Locally
-
-```bash
-# Use Stripe CLI to forward webhooks
-stripe listen --forward-to localhost:3000/api/webhooks/stripe
-
-# Trigger test event
-stripe trigger payment_intent.succeeded
-```
-
-### Step 6: Validate Webhook Signatures
-
-```typescript
-// server/_core/index.ts
-app.post(
-  "/api/webhooks/stripe",
-  express.raw({ type: "application/json" }),
-  (req, res) => {
-    const sig = req.headers["stripe-signature"];
-    try {
-      const event = stripe.webhooks.constructEvent(
-        req.body,
-        sig,
-        process.env.STRIPE_WEBHOOK_SECRET!
-      );
-      console.log(`[Webhook] Received event: ${event.type}`);
-    } catch (error) {
-      console.error(`[Webhook] Signature verification failed:`, error);
-      res.status(400).send("Webhook signature verification failed");
-    }
-  }
-);
-```
-
-### Step 7: Check Payment Intent Status
-
-```typescript
-// Verify payment intent was created and succeeded
-const paymentIntent = await stripe.paymentIntents.retrieve(
-  booking.stripePaymentIntentId
-);
-console.log(`Payment status: ${paymentIntent.status}`);
-```
-
-### Step 8: Verify Booking Status Updates
-
-```typescript
-// After webhook received, confirm booking status changed
-const booking = await getBooking(bookingId);
-console.log(`Booking status: ${booking.status}`); // Should be 'confirmed'
-```
-
-### Step 9: Test End-to-End Flow
-
-```bash
-# 1. Create booking via API
-curl -X POST http://localhost:3000/api/trpc/bookings.createBooking \
-  -H "Content-Type: application/json" \
-  -d '{...booking data...}'
-
-# 2. Simulate payment success
-curl -X POST http://localhost:3000/api/webhooks/stripe \
-  -H "stripe-signature: ..." \
-  -d '{...webhook payload...}'
-
-# 3. Verify booking confirmed
-curl http://localhost:3000/api/trpc/bookings.getBooking?id=...
-```
-
-### Step 10: Monitor Logs and Metrics
-
-```typescript
-// Add structured logging
-import { notifyOwner } from "./server/_core/notification";
-
-app.post("/api/webhooks/stripe", async (req, res) => {
-  try {
-    // Process webhook
-    await notifyOwner({
-      title: "Booking Confirmed",
-      content: `Booking #${bookingId} payment received and confirmed`,
-    });
-  } catch (error) {
-    await notifyOwner({
-      title: "Webhook Error",
-      content: `Failed to process webhook: ${error.message}`,
-    });
-  }
-});
-```
-
-
-### Production Implementation
-
-1. **Stripe Webhook Signature Validation**
-   - Always verify `stripe-signature` header
-   - Use Stripe's official SDK for verification
-   - Reject unverified requests
-
-2. **API Key Management**
-   - Store keys in environment variables
-   - Never commit `.env` files
-   - Rotate keys periodically
-   - Use separate keys for test/production
-
-3. **HTTPS Only**
-   - Enforce HTTPS for all API endpoints
-   - Stripe webhooks require HTTPS
-
-4. **Rate Limiting**
-   - Implement rate limiting on booking endpoint
-   - Prevent abuse of availability queries
-
-5. **Input Validation**
-   - Validate all user inputs with Zod
-   - Sanitize email and phone inputs
-   - Validate booking times against availability
+* Setup env vars
+* Configure Stripe webhook URL
+* Configure Cal.com API
 
 ---
 
-## 7. Trade-offs and Future Improvements
+## 📄 License
 
-### Current Limitations
+MIT
 
-1. **Email Notifications:** Confirmation emails not sent
-2. **No Caching:** Cal.com API called on every availability request
-3. **Single Timezone:** Currently supports only America/Recife timezone
+## Contact
 
-### Current Implementation Status
-
-1. **Cal.com Integration** ✅ FULLY IMPLEMENTED
-   - Real availability fetching from practitioner calendars
-   - Automatic event creation upon payment confirmation
-   - Proper error handling and fallback to mock data
-
-2. **Future Improvements (With More Time)**
-
-3. **Cal.com Enhancements**
-   - Add caching layer to reduce API calls
-   - Support multiple timezones
-   - Handle calendar sync errors gracefully
-   - Add availability buffer times
-
-4. **Email Notifications**
-   - Send confirmation emails to clients
-   - Send reminder emails 24 hours before appointment
-   - Send receipt emails after payment
-
-5. **Admin Dashboard**
-   - View all bookings
-   - Manage practitioner availability
-   - Process refunds
-   - View payment analytics
-
-6. **Client Portal**
-   - View booking history
-   - Cancel/reschedule bookings
-   - Download receipts
-
-7. **Automated Testing**
-   - Unit tests for tRPC procedures
-   - Integration tests for booking flow
-   - E2E tests with Playwright
+For help, open an issue or consult `TECHNICAL_DECISIONS.md`.
 
 ---
 
-## 8. Database Schema
+**Status:** Production Ready
 
-### Tables
+**Version:** 1.1.0
 
-**users** - Manus OAuth users
-
-- id, openId, name, email, loginMethod, role, createdAt, updatedAt, lastSignedIn
-
-**practitioners** - Service providers
-
-- id, name, email, description, hourlyRate (in pence), createdAt, updatedAt
-
-**bookings** - Appointments and payments
-
-- id, practitionerId, clientName, clientEmail, clientPhone, bookingTime
-- status (pending|confirmed|cancelled), stripeSessionId, stripePaymentIntentId
-- amount (in pence), createdAt, updatedAt
-
----
-
-## 9. API Endpoints
-
-### tRPC Procedures
-
-**practitioners.getAll**
-
-- Input: None
-- Output: `Practitioner[]`
-- Purpose: Fetch all practitioners from database
-
-**bookings.getAvailability**
-
-- Input: `{ practitionerId: number }`
-- Output: `{ practitioner, slots: TimeSlot[] }`
-- Purpose: Fetch available time slots for a practitioner
-
-**bookings.createBooking**
-
-- Input: `{ practitionerId, clientName, clientEmail, clientPhone, bookingTime }`
-- Output: `{ bookingId, checkoutUrl, amount }`
-- Purpose: Create booking and generate checkout session
-
-**bookings.confirmBooking**
-
-- Input: `{ stripeSessionId: string }`
-- Output: `{ bookingId, status }`
-- Purpose: Confirm booking after successful payment and create Cal.com event
-
-**bookings.cancelBooking**
-
-- Input: `{ bookingId: number }`
-- Output: `{ bookingId, status }`
-- Purpose: Cancel booking and remove from Cal.com
-
-### Cal.com Service Functions
-
-**createCalComBooking(bookingData)** - Creates a meeting in Cal.com calendar
-
-```typescript
-const result = await createCalComBooking({
-  practitionerId: 1,
-  clientName: "John Doe",
-  clientEmail: "john@example.com",
-  clientPhone: "+1234567890",
-  startTime: new Date("2025-12-10T14:00:00Z"),
-  endTime: new Date("2025-12-10T15:00:00Z"),
-  title: "Consultation Session",
-  description: "Booked via BookingFlow"
-});
-
-if (result.success) {
-  console.log("Event created:", result.eventId);
-} else {
-  console.error("Failed:", result.error);
-}
-```
-
-**cancelCalComBooking(bookingUid)** - Cancels a meeting in Cal.com
-
-```typescript
-const result = await cancelCalComBooking("booking-uid-from-calcom");
-if (result.success) {
-  console.log("Event cancelled");
-} else {
-  console.error("Failed:", result.error);
-}
-```
-
----
-
-## 10. Deployment Checklist
-
-- [ ] Set all environment variables (Stripe keys, database URL, etc.)
-- [ ] Run database migrations: `pnpm db:push`
-- [ ] Build application: `pnpm build`
-- [ ] Test booking flow end-to-end
-- [ ] Configure Stripe webhook URL
-- [ ] Set up monitoring and error tracking
-- [ ] Create backup of database
-- [ ] Document runbook for common issues
-- [ ] Set up automated backups
-- [ ] Configure SSL certificate
-
----
-
-## Conclusion
-
-This implementation provides a **production-ready booking system** with **real Cal.com integration** fully operational. The system successfully connects to live practitioner calendars and provides accurate availability data.
-
-**Current Status:**
-- ✅ **Cal.com Integration:** Real API, fully working
-- ✅ **Database:** PostgreSQL/Neon, fully operational
-- ✅ **Booking Flow:** Complete end-to-end (create → payment → confirm)
-- ✅ **Stripe Integration:** Real implementation 
-
-## FLUXO DE DADOS COMPLETO
-1. Usuário acessa /book/1
-   ↓
-2. Frontend → tRPC getAvailability({ practitionerId: 1 })
-   ↓
-3. Backend → Database: SELECT * FROM practitioners WHERE id = 1
-   ↓
-4. Backend → Cal.com: GET /availability?userId=1967202&eventTypeId=4071936
-   ↓
-5. Cal.com → Backend: { busy: [], dateRanges: [...], workingHours: [...] }
-   ↓
-6. Backend → Frontend: { practitioner: {...}, slots: [...] }
-   ↓
-7. Usuário seleciona slot e preenche formulário
-   ↓
-8. Frontend → tRPC createBooking({ ...dados da reserva })
-   ↓
-9. Backend → Database: INSERT INTO bookings VALUES (...)
-   ↓
-10. Backend → Stripe: Cria checkout session (mock)
-    ↓
-11. Backend → Database: UPDATE bookings SET stripeSessionId = '...'
-    ↓
-12. Frontend → Redireciona para checkout.url
-    ↓
-13. Stripe → Usuário paga
-    ↓
-14. Stripe → Webhook /api/webhooks/stripe
-    ↓
-15. Backend → Database: UPDATE bookings SET status = 'confirmed'
-    ↓
-16. Backend → Cal.com:
-POST /v1/bookings criando o evento real no calendário
-
-The architecture supports easy migration to production services. The Cal.com integration demonstrates the pattern for external API integrations, and the same approach can be applied to complete the Stripe implementation.
-
-For questions or issues, refer to the debugging strategy in Section 4 or contact the developer A.K.A Edivaldo Victor, phone number (81 99715-0571).
+**Last Updated:** December 2025
