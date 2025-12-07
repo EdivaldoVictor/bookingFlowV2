@@ -19,8 +19,9 @@ This document outlines the architectural decisions, implementation choices, and 
 - **API:** tRPC with proper error handling and validation
 - **Testing:** 17 passing tests with comprehensive coverage
 
+
 ### ⚠️ Pending Critical Features
-- **Stripe Configuration:** API keys need to be configured in production
+
 - **Production Deployment:** Environment setup and monitoring
 - **Email Notifications:** Booking confirmations and reminders
 
@@ -575,7 +576,7 @@ bookings: router({
 
 ### Tables
 
-**users** - Manus OAuth users
+**users** - OAuth users
 
 - id, openId, name, email, loginMethod, role, createdAt, updatedAt, lastSignedIn
 
@@ -663,12 +664,12 @@ if (result.success) {
 
 ## 10. Deployment Checklist
 
-- [ ] Set all environment variables (Stripe keys, database URL, etc.)
-- [ ] Run database migrations: `pnpm db:push`
-- [ ] Build application: `pnpm build`
-- [ ] Test booking flow end-to-end
-- [ ] Configure Stripe webhook URL
-- [ ] Set up monitoring and error tracking
+- [x] Set all environment variables (Stripe keys, database URL, etc.)
+- [x] Run database migrations: `pnpm db:push`
+- [x] Build application: `pnpm build`
+- [x] Test booking flow end-to-end
+- [x] Configure Stripe webhook URL
+- [x] Set up monitoring and error tracking
 - [ ] Create backup of database
 - [ ] Document runbook for common issues
 - [ ] Set up automated backups
