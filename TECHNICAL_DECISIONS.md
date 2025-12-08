@@ -717,6 +717,16 @@ This implementation provides a **production-ready booking system** with **real C
 14. Stripe → Webhook /api/webhooks/stripe
     ↓
 15. Backend → Database: UPDATE bookings SET status = 'confirmed'
+    ↓
+16. Backend → Cal.com & Email
+
+Cria o evento definitivamente no Cal.com usando a API v1 (POST /bookings)
+
+Atualiza a reserva no banco com o calBookingId
+
+Dispara o email de confirmação (ou confia no próprio Cal.com, dependendo da configuração da Event Type)
+
+Retorna sucesso ao webhook
 
 The architecture supports easy migration to production services. The Cal.com integration demonstrates the pattern for external API integrations, and the same approach can be applied to complete the Stripe implementation.
 

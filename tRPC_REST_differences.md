@@ -118,7 +118,7 @@ Com Express + tRPC, foi possível estruturar o backend com uma modularidade clar
   env
   errors
   logger
-  prisma
+  Drizzle
 
 
 Isso facilita:
