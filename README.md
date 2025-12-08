@@ -1,5 +1,8 @@
 # BookingFlow - Fast Appointment Booking with Payment
 
+Application deployed on Render URL: https://bookingflowv2.onrender.com/
+REAL STRIPE API, NOT THE TEST ONE PROCCESING REAL PAYMENT, CONFIGURED MY STRIPE ACCOUNT AND MY BANK ACCOUNT .
+
 A modern booking-flow application built with **Vite + React + Express + tRPC**, featuring real **Stripe payments** and **Cal.com availability + booking creation**.
 
 Complete a full booking flow in **2–3 minutes** with:
