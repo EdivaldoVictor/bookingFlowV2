@@ -72,7 +72,7 @@ export async function createCheckoutSession(params: {
       clientName: params.clientName,
     },
     success_url: `${process.env.BASE_URL || "http://localhost:3000"}/booking/success?session_id={CHECKOUT_SESSION_ID}`,
-    cancel_url: `${process.env.BASE_URL || "http://localhost:3000"}/booking/cancel`,
+    cancel_url: `${process.env.BASE_URL || "http://localhost:3000"}`,
   });
 
   if (!session.url) {
