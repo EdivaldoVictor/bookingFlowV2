@@ -16,30 +16,8 @@ export default function Home() {
     error,
   } = trpc.practitioners.getAll.useQuery();
 
-  // Mock data fallback
-  const mockPractitioners = [
-    {
-      id: 1,
-      name: "Dr. Sarah Johnson",
-      description: "Clinical Psychologist",
-      hourlyRate: 8000, // £80 in pence
-    },
-    {
-      id: 2,
-      name: "Dr. Michael Chen",
-      description: "Therapist",
-      hourlyRate: 7500, // £75 in pence
-    },
-    {
-      id: 3,
-      name: "Emma Wilson",
-      description: "Counselor",
-      hourlyRate: 6000, // £60 in pence
-    },
-  ];
-
-  // Use API data if available, otherwise use mock data
-  const finalPractitioners = practitioners || mockPractitioners;
+  // Use API data
+  const finalPractitioners = practitioners 
 
   return (
     <div className="min-h-screen bg-background">
@@ -227,7 +205,7 @@ export default function Home() {
         <div className="container py-8">
           <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
             <p className="text-sm text-muted-foreground">
-              © 2024 Healguid. All rights reserved.
+              © 2025 Healguid. All rights reserved.
             </p>
             <div className="flex gap-6 text-sm text-muted-foreground">
               <a href="#" className="hover:text-foreground transition-colors">
