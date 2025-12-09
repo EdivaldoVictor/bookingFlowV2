@@ -42,51 +42,9 @@ export default function BookingPage({ practitionerId }: BookingPageProps) {
     }
   );
 
-  // Mock data as fallback
-  const mockAvailabilityData = {
-    practitioner: {
-      id: practitionerId,
-      name: "Dr. Sarah Johnson",
-      email: "sarah@example.com",
-      hourlyRate: 8000,
-    },
-    slots: [
-      {
-        id: "1-9am",
-        startTime: new Date(
-          Date.now() + 24 * 60 * 60 * 1000 + 9 * 60 * 60 * 1000
-        ), // Tomorrow 9am
-        endTime: new Date(
-          Date.now() + 24 * 60 * 60 * 1000 + 10 * 60 * 60 * 1000
-        ), // Tomorrow 10am
-        available: true,
-      },
-      {
-        id: "1-11am",
-        startTime: new Date(
-          Date.now() + 24 * 60 * 60 * 1000 + 11 * 60 * 60 * 1000
-        ), // Tomorrow 11am
-        endTime: new Date(
-          Date.now() + 24 * 60 * 60 * 1000 + 12 * 60 * 60 * 1000
-        ), // Tomorrow 12pm
-        available: true,
-      },
-      {
-        id: "1-2pm",
-        startTime: new Date(
-          Date.now() + 24 * 60 * 60 * 1000 + 14 * 60 * 60 * 1000
-        ), // Tomorrow 2pm
-        endTime: new Date(
-          Date.now() + 24 * 60 * 60 * 1000 + 15 * 60 * 60 * 1000
-        ), // Tomorrow 3pm
-        available: true,
-      },
-    ],
-  };
-
-  // Use API data if available, otherwise use mock data
-  const finalAvailabilityData =
-    availabilityData || (error ? mockAvailabilityData : null);
+ 
+  // Use API data available
+  const finalAvailabilityData = availabilityData 
 
   console.log("Availability query state:", {
     isLoading,
