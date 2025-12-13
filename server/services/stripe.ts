@@ -51,10 +51,9 @@ export async function createCheckoutSession(params: {
   const stripe = getStripeClient();
 
   const session = await stripe.checkout.sessions.create({
-    automatic_payment_methods: {
-    enabled: true,
-  },
-    line_items: [
+    payment_method_types: ["card"],
+    expires_at: Math.floor(Date.now() / 1000) + 1800,
+       line_items: [
       {
         price_data: {
           currency: params.currency.toLowerCase(),
@@ -69,13 +68,18 @@ export async function createCheckoutSession(params: {
     ],
     mode: "payment",
     customer_email: params.clientEmail,
+    client_reference_id: params.bookingId.toString(),
     metadata: {
       bookingId: params.bookingId.toString(),
       clientName: params.clientName,
     },
     success_url: `${process.env.BASE_URL || "http://localhost:3000"}/booking/success?session_id={CHECKOUT_SESSION_ID}`,
     cancel_url: `${process.env.BASE_URL || "http://localhost:3000"}`,
-  });
+  },
+{
+    idempotencyKey: `booking-${params.bookingId}`,
+}
+);
 
   if (!session.url) {
     throw new Error("Failed to create checkout session URL");
