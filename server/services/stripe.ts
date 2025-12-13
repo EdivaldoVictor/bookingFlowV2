@@ -76,9 +76,6 @@ export async function createCheckoutSession(params: {
     success_url: `${process.env.BASE_URL || "http://localhost:3000"}/booking/success?session_id={CHECKOUT_SESSION_ID}`,
     cancel_url: `${process.env.BASE_URL || "http://localhost:3000"}`,
   },
-{
-    idempotencyKey: `booking-${params.bookingId}`,
-}
 );
 
   if (!session.url) {
