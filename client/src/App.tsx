@@ -15,7 +15,7 @@ function Router() {
       <Route path={"/"} component={Home} />
       <Route path="/book/:practitionerId">
         {params => (
-          <BookingPage practitionerId={parseInt(params.practitionerId)} />
+          <BookingPage practitionerId={params.practitionerId} />
         )}
       </Route>
       <Route path="/booking/success" component={BookingSuccess} />

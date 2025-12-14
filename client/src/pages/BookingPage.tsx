@@ -9,8 +9,11 @@ import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 
 interface BookingPageProps {
-  practitionerId: number;
+  practitionerId: string;
 }
+
+// UUID validation regex
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export default function BookingPage({ practitionerId }: BookingPageProps) {
   const [, navigate] = useLocation();
@@ -24,6 +27,34 @@ export default function BookingPage({ practitionerId }: BookingPageProps) {
 
   console.log("BookingPage rendered with practitionerId:", practitionerId);
 
+  // Validate UUID format - if it's a number, it's an old ID format
+  const isValidUUID = UUID_REGEX.test(practitionerId);
+  const isNumericId = /^\d+$/.test(practitionerId);
+
+  // If it's a numeric ID (old format), show error and redirect
+  if (isNumericId || !isValidUUID) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Card className="p-6 max-w-md">
+          <div className="text-center">
+            <h2 className="text-xl font-semibold text-red-600 mb-2">
+              Invalid Practitioner ID
+            </h2>
+            <p className="text-gray-600 mb-4">
+              The practitioner ID format has changed. Please select a practitioner from the home page.
+            </p>
+            <p className="text-sm text-gray-500 mb-4">
+              Received ID: {practitionerId}
+            </p>
+            <Button onClick={() => navigate("/")} className="w-full">
+              Go to Home Page
+            </Button>
+          </div>
+        </Card>
+      </div>
+    );
+  }
+
   // Fetch availability
   const {
     data: availabilityData,
@@ -36,7 +67,6 @@ export default function BookingPage({ practitionerId }: BookingPageProps) {
       onSuccess: data => console.log("Availability data received:", data),
       onError: error => {
         console.error("Availability query error:", error);
-        console.log("Using mock data as fallback");
       },
       retry: false, // Don't retry on error
     }
@@ -151,6 +181,13 @@ export default function BookingPage({ practitionerId }: BookingPageProps) {
   }
 
   if (error) {
+    // Check if error is due to invalid UUID format
+    const isInvalidUUIDError = error.message?.includes("Invalid UUID") || 
+                               error.message?.includes("invalid_format") ||
+                               (error as any)?.data?.zodError?.issues?.some(
+                                 (issue: any) => issue.code === "invalid_format" && issue.format === "uuid"
+                               );
+
     return (
       <div className="min-h-screen flex items-center justify-center">
         <Card className="p-6 max-w-md">
@@ -158,16 +195,32 @@ export default function BookingPage({ practitionerId }: BookingPageProps) {
             <h2 className="text-xl font-semibold text-red-600 mb-2">
               Error Loading Availability
             </h2>
-            <p className="text-gray-600 mb-4">{error.message}</p>
-            <p className="text-sm text-gray-500">
-              Practitioner ID: {practitionerId}
-            </p>
-            <button
-              onClick={() => window.location.reload()}
-              className="mt-4 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
-            >
-              Try Again
-            </button>
+            {isInvalidUUIDError ? (
+              <>
+                <p className="text-gray-600 mb-2">
+                  The practitioner ID format is invalid. The system now uses UUIDs instead of numeric IDs.
+                </p>
+                <p className="text-sm text-gray-500 mb-4">
+                  Please go back to the home page and select a practitioner from the list.
+                </p>
+                <Button onClick={() => navigate("/")} className="w-full mb-2">
+                  Go to Home Page
+                </Button>
+              </>
+            ) : (
+              <>
+                <p className="text-gray-600 mb-4">{error.message}</p>
+                <p className="text-sm text-gray-500 mb-4">
+                  Practitioner ID: {practitionerId}
+                </p>
+                <Button
+                  onClick={() => window.location.reload()}
+                  className="w-full"
+                >
+                  Try Again
+                </Button>
+              </>
+            )}
           </div>
         </Card>
       </div>

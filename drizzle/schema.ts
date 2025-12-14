@@ -4,8 +4,10 @@ import {
   pgTable,
   text,
   timestamp,
+  uuid,
   varchar,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 
 /**
  * Core user table backing auth flow.
@@ -44,7 +46,7 @@ export type InsertUser = typeof users.$inferInsert;
  * Practitioners table for booking system
  */
 export const practitioners = pgTable("practitioners", {
-  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  id: uuid("id").default(sql`gen_random_uuid()`).primaryKey(),
   name: varchar("name", { length: 255 }).notNull(),
   email: varchar("email", { length: 320 }).notNull(),
   description: text("description"),
@@ -60,8 +62,8 @@ export type InsertPractitioner = typeof practitioners.$inferInsert;
  * Bookings table for tracking appointments and payments
  */
 export const bookings = pgTable("bookings", {
-  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
-  practitionerId: integer("practitionerId").notNull(),
+  id: uuid("id").default(sql`gen_random_uuid()`).primaryKey(),
+  practitionerId: uuid("practitionerId").notNull(),
   clientName: varchar("clientName", { length: 255 }).notNull(),
   clientEmail: varchar("clientEmail", { length: 320 }).notNull(),
   clientPhone: varchar("clientPhone", { length: 20 }).notNull(),

@@ -16,8 +16,8 @@ export default function Home() {
     error,
   } = trpc.practitioners.getAll.useQuery();
 
-  // Use API data
-  const finalPractitioners = practitioners 
+  // Use API data - ensure it's always an array
+  const finalPractitioners = practitioners || [] 
 
   return (
     <div className="min-h-screen bg-background">
@@ -193,9 +193,17 @@ export default function Home() {
               Choose a practitioner above and book your appointment. The entire
               process takes just 2-3 minutes.
             </p>
-            <Button size="lg" asChild>
-              <Link href="/book/1">Book Your First Appointment</Link>
-            </Button>
+            {finalPractitioners.length > 0 ? (
+              <Button size="lg" asChild>
+                <Link href={`/book/${finalPractitioners[0].id}`}>
+                  Book Your First Appointment
+                </Link>
+              </Button>
+            ) : (
+              <Button size="lg" disabled>
+                No Practitioners Available
+              </Button>
+            )}
           </div>
         </Card>
       </section>

@@ -46,7 +46,7 @@ export async function createCheckoutSession(params: {
   currency: string;
   clientEmail: string;
   clientName: string;
-  bookingId: number;
+  bookingId: string;
 }): Promise<CheckoutSession> {
   const stripe = getStripeClient();
 
@@ -68,9 +68,9 @@ export async function createCheckoutSession(params: {
     ],
     mode: "payment",
     customer_email: params.clientEmail,
-    client_reference_id: params.bookingId.toString(),
+    client_reference_id: params.bookingId,
     metadata: {
-      bookingId: params.bookingId.toString(),
+      bookingId: params.bookingId,
       clientName: params.clientName,
     },
     success_url: `${process.env.BASE_URL || "http://localhost:3000"}/booking/success?session_id={CHECKOUT_SESSION_ID}`,
@@ -132,14 +132,14 @@ export function validateWebhookSignature(
  */
 export async function processWebhookEvent(
   event: Stripe.Event
-): Promise<{ bookingId: number; sessionId: string } | null> {
+): Promise<{ bookingId: string; sessionId: string } | null> {
   // Handle the checkout.session.completed event
   if (event.type === "checkout.session.completed") {
     const session = event.data.object as Stripe.Checkout.Session;
 
     if (session.payment_status === "paid" && session.metadata?.bookingId) {
       return {
-        bookingId: parseInt(session.metadata.bookingId, 10),
+        bookingId: session.metadata.bookingId,
         sessionId: session.id,
       };
     }

@@ -24,7 +24,7 @@ interface CalComAvailabilityResponse {
  * Fetches busy slots and generates available time slots
  */
 async function getCalComAvailability(
-  practitionerId: number
+  practitionerId: string
 ): Promise<TimeSlot[]> {
   const apiKey = process.env.CALCOM_API_KEY;
   const calComUrl = process.env.CALCOM_API_URL || "https://api.cal.com/v1";
@@ -52,14 +52,32 @@ async function getCalComAvailability(
     // Map practitioner ID to Cal.com user/event type
     // Using single CALCOM_USER_ID for all practitioners, each with their own event type
     calComUserId = process.env.CALCOM_USER_ID;
-    eventTypeId = process.env[`CALCOM_EVENT_TYPE_${practitionerId}`];
+    
+    // Try multiple strategies to find eventTypeId:
+    // 1. Try with UUID as-is (with hífens substituídos por underscores)
+    // 2. Try with UUID sem hífens
+    // 3. Try with primeiros 8 caracteres do UUID
+    // 4. Try default event type
+    const uuidNormalized = practitionerId.replace(/-/g, '_');
+    const uuidNoHyphens = practitionerId.replace(/-/g, '');
+    const uuidShort = practitionerId.substring(0, 8);
+    
+    eventTypeId = 
+      process.env[`CALCOM_EVENT_TYPE_${uuidNormalized}`] ||
+      process.env[`CALCOM_EVENT_TYPE_${uuidNoHyphens}`] ||
+      process.env[`CALCOM_EVENT_TYPE_${uuidShort}`] ||
+      process.env.CALCOM_EVENT_TYPE_DEFAULT;
 
     if (!calComUserId || !eventTypeId) {
       console.warn(
-        `[Cal.com] Missing environment variables for practitioner ${practitionerId}: CALCOM_USER_ID or CALCOM_EVENT_TYPE_${practitionerId}`
+        `[Cal.com] Missing environment variables for practitioner ${practitionerId}`
       );
-      console.log("[Availability] Falling back to mock data due to missing configuration");
-      return getMockAvailability(practitionerId);
+      console.warn(
+        `[Cal.com] Tried: CALCOM_EVENT_TYPE_${uuidNormalized}, CALCOM_EVENT_TYPE_${uuidNoHyphens}, CALCOM_EVENT_TYPE_${uuidShort}, CALCOM_EVENT_TYPE_DEFAULT`
+      );
+      console.warn(
+        `[Cal.com] Please set CALCOM_USER_ID and one of the event type variables above`
+      );
     }
 
     console.log(
@@ -183,7 +201,7 @@ function isSlotBusy(
  * Each day has 5 slots: 9am, 11am, 1pm, 3pm, 5pm
  * Used as fallback when Cal.com API is not available
  */
-function getMockAvailability(practitionerId: number): TimeSlot[] {
+function getMockAvailability(practitionerId: string): TimeSlot[] {
   const slots: TimeSlot[] = [];
   const now = new Date();
 
@@ -231,7 +249,7 @@ function getMockAvailability(practitionerId: number): TimeSlot[] {
  * This would be called from the tRPC procedure
  */
 export async function getAvailabilityForPractitioner(
-  practitionerId: number
+  practitionerId: string
 ): Promise<TimeSlot[]> {
   console.log(
     `[Availability] getAvailabilityForPractitioner called for practitioner ${practitionerId}`
@@ -250,7 +268,7 @@ export async function getAvailabilityForPractitioner(
  * This should be called after successful Stripe payment
  */
 export async function createCalComBooking(bookingData: {
-  practitionerId: number;
+  practitionerId: string;
   clientName: string;
   clientEmail: string;
   clientPhone?: string;
@@ -273,12 +291,35 @@ export async function createCalComBooking(bookingData: {
     // Get the correct userId and eventTypeId for this practitioner
     // Using single CALCOM_USER_ID for all practitioners, each with their own event type
     const calComUserId = process.env.CALCOM_USER_ID;
-    const eventTypeId = process.env[`CALCOM_EVENT_TYPE_${bookingData.practitionerId}`];
+    
+    // Try multiple strategies to find eventTypeId:
+    // 1. Try with UUID as-is (with hífens substituídos por underscores)
+    // 2. Try with UUID sem hífens
+    // 3. Try with primeiros 8 caracteres do UUID
+    // 4. Try default event type
+    const uuidNormalized = bookingData.practitionerId.replace(/-/g, '_');
+    const uuidNoHyphens = bookingData.practitionerId.replace(/-/g, '');
+    const uuidShort = bookingData.practitionerId.substring(0, 8);
+    
+    let eventTypeId = 
+      process.env[`CALCOM_EVENT_TYPE_${uuidNormalized}`] ||
+      process.env[`CALCOM_EVENT_TYPE_${uuidNoHyphens}`] ||
+      process.env[`CALCOM_EVENT_TYPE_${uuidShort}`] ||
+      process.env.CALCOM_EVENT_TYPE_DEFAULT;
 
-    if (!calComUserId || !eventTypeId) {
-      console.warn(`[Cal.com] Missing environment variables for practitioner ${bookingData.practitionerId}`);
-      return { success: false, error: "Practitioner configuration missing" };
+    if (!calComUserId) {
+      console.warn(`[Cal.com] Missing CALCOM_USER_ID environment variable`);
+      return { success: false, error: "CALCOM_USER_ID not configured" };
     }
+
+    if (!eventTypeId) {
+      console.warn(`[Cal.com] Missing event type configuration for practitioner ${bookingData.practitionerId}`);
+      console.warn(`[Cal.com] Tried: CALCOM_EVENT_TYPE_${uuidNormalized}, CALCOM_EVENT_TYPE_${uuidNoHyphens}, CALCOM_EVENT_TYPE_${uuidShort}, CALCOM_EVENT_TYPE_DEFAULT`);
+      console.warn(`[Cal.com] Please set one of these environment variables or CALCOM_EVENT_TYPE_DEFAULT`);
+      return { success: false, error: "Practitioner configuration missing: eventTypeId not found" };
+    }
+
+    console.log(`[Cal.com] Using eventTypeId: ${eventTypeId} for practitioner ${bookingData.practitionerId}`);
 
     // Prepare the booking data for Cal.com API
     const bookingPayload = {

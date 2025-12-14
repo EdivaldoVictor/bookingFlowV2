@@ -98,11 +98,19 @@ async function handleStripeWebhook(req: Request, res: Response) {
 
       // Create Cal.com event automatically
       try {
+        console.log(`[Webhook] Attempting to create Cal.com event for booking ${bookingId}`);
         const practitioner = await getPractitioner(booking.practitionerId);
-        if (practitioner) {
+        
+        if (!practitioner) {
+          console.warn(`[Webhook] Practitioner ${booking.practitionerId} not found, skipping Cal.com event creation`);
+        } else {
+          console.log(`[Webhook] Practitioner found: ${practitioner.name} (${practitioner.id})`);
+          
           // Calculate end time (assuming 1 hour sessions)
           const endTime = new Date(booking.bookingTime);
           endTime.setHours(endTime.getHours() + 1);
+
+          console.log(`[Webhook] Creating Cal.com booking for ${booking.clientName} at ${booking.bookingTime.toISOString()}`);
 
           const calComResult = await createCalComBooking({
             practitionerId: booking.practitionerId,
@@ -115,14 +123,19 @@ async function handleStripeWebhook(req: Request, res: Response) {
           });
           
           if (calComResult.success) {
-            console.log(`[Webhook] Cal.com event created: ${calComResult.eventId}`);
+            console.log(`[Webhook] ✅ Cal.com event created successfully: ${calComResult.eventId}`);
           } else {
-            console.warn(`[Webhook] Failed to create Cal.com event: ${calComResult.error}`);
+            console.warn(`[Webhook] ⚠️  Failed to create Cal.com event: ${calComResult.error}`);
+            console.warn(`[Webhook] Booking is still confirmed, but Cal.com event was not created`);
+            console.warn(`[Webhook] Please check Cal.com configuration in environment variables`);
           }
         }
-      } catch (error) {
-        console.error("[Webhook] Error creating Cal.com event:", error);
+      } catch (error: any) {
+        console.error("[Webhook] ❌ Error creating Cal.com event:", error);
+        console.error("[Webhook] Error message:", error.message);
+        console.error("[Webhook] Error stack:", error.stack);
         // Don't fail the webhook if Cal.com fails - booking is already confirmed
+        console.warn("[Webhook] Booking confirmation succeeded, but Cal.com event creation failed");
       }
 
       // TODO: Send confirmation email to client

@@ -14,7 +14,8 @@
     "db:seed": "tsx scripts/db.ts seed",
     "db:test": "tsx scripts/db.ts test",
     "db:reset": "tsx scripts/db.ts all",
-    "db:push": "drizzle-kit push --yes"
+    "db:push": "drizzle-kit push --yes",
+    "db:migrate-uuid": "tsx scripts/migrate-to-uuid.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.693.0",
