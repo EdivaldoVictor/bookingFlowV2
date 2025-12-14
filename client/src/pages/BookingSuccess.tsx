@@ -29,7 +29,7 @@ export default function BookingSuccess() {
   // Fallback: get booking by ID if we have bookingId but no sessionId
   const { data: bookingById, isLoading: isLoadingById } = 
     trpc.bookings.getBooking.useQuery(
-      { bookingId: bookingId ? parseInt(bookingId) : 0 },
+      { bookingId: bookingId || "" },
       {
         enabled: !!bookingId && !sessionId,
         retry: false,

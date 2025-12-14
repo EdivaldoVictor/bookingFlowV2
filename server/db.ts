@@ -114,7 +114,7 @@ export async function getUserByOpenId(openId: string) {
   return result.length > 0 ? result[0] : undefined;
 }
 
-export async function getPractitioner(id: number) {
+export async function getPractitioner(id: string) {
   const db = await getDb();
   if (!db) {
     // Fallback to mock data if database is not available
@@ -140,10 +140,17 @@ export async function getPractitioner(id: number) {
   return practitioner;
 }
 
-function getMockPractitioner(id: number) {
+// Fixed UUIDs for mock practitioners (for consistency in development)
+const MOCK_PRACTITIONER_IDS = {
+  sarah: "550e8400-e29b-41d4-a716-446655440001",
+  michael: "550e8400-e29b-41d4-a716-446655440002",
+  emma: "550e8400-e29b-41d4-a716-446655440003",
+} as const;
+
+function getMockPractitioner(id: string) {
   const mockPractitioners = [
     {
-      id: 1,
+      id: MOCK_PRACTITIONER_IDS.sarah,
       name: "Dr. Sarah Johnson",
       email: "sarah@example.com",
       description: "Clinical Psychologist",
@@ -152,7 +159,7 @@ function getMockPractitioner(id: number) {
       updatedAt: new Date(),
     },
     {
-      id: 2,
+      id: MOCK_PRACTITIONER_IDS.michael,
       name: "Dr. Michael Chen",
       email: "michael@example.com",
       description: "Therapist",
@@ -161,7 +168,7 @@ function getMockPractitioner(id: number) {
       updatedAt: new Date(),
     },
     {
-      id: 3,
+      id: MOCK_PRACTITIONER_IDS.emma,
       name: "Emma Wilson",
       email: "emma@example.com",
       description: "Counselor",
@@ -177,7 +184,7 @@ function getMockPractitioner(id: number) {
 function getMockPractitioners() {
   return [
     {
-      id: 1,
+      id: MOCK_PRACTITIONER_IDS.sarah,
       name: "Dr. Sarah Johnson",
       email: "sarah@example.com",
       description: "Clinical Psychologist",
@@ -186,7 +193,7 @@ function getMockPractitioners() {
       updatedAt: new Date(),
     },
     {
-      id: 2,
+      id: MOCK_PRACTITIONER_IDS.michael,
       name: "Dr. Michael Chen",
       email: "michael@example.com",
       description: "Therapist",
@@ -195,7 +202,7 @@ function getMockPractitioners() {
       updatedAt: new Date(),
     },
     {
-      id: 3,
+      id: MOCK_PRACTITIONER_IDS.emma,
       name: "Emma Wilson",
       email: "emma@example.com",
       description: "Counselor",
@@ -210,11 +217,42 @@ export async function createBooking(booking: InsertBooking) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
 
-  const result = await db.insert(bookings).values(booking).returning();
-  return result[0];
+  try {
+    console.log("[DB] Creating booking with data:", {
+      practitionerId: booking.practitionerId,
+      clientName: booking.clientName,
+      clientEmail: booking.clientEmail,
+      clientPhone: booking.clientPhone,
+      bookingTime: booking.bookingTime,
+      status: booking.status,
+      amount: booking.amount,
+      stripeSessionId: booking.stripeSessionId || null,
+      stripePaymentIntentId: booking.stripePaymentIntentId || null,
+    });
+
+    const result = await db.insert(bookings).values(booking).returning();
+    
+    if (!result || result.length === 0) {
+      throw new Error("Failed to create booking: no result returned");
+    }
+    
+    console.log("[DB] Booking created successfully:", result[0].id);
+    return result[0];
+  } catch (error: any) {
+    console.error("[DB] Error creating booking:", error);
+    console.error("[DB] Error message:", error.message);
+    console.error("[DB] Error code:", error.code);
+    if (error.detail) {
+      console.error("[DB] Error detail:", error.detail);
+    }
+    if (error.hint) {
+      console.error("[DB] Error hint:", error.hint);
+    }
+    throw error;
+  }
 }
 
-export async function getBooking(id: number) {
+export async function getBooking(id: string) {
   const db = await getDb();
   if (!db) return undefined;
 
@@ -227,7 +265,7 @@ export async function getBooking(id: number) {
 }
 
 export async function updateBookingStatus(
-  id: number,
+  id: string,
   status: "pending" | "confirmed" | "cancelled"
 ) {
   const db = await getDb();
@@ -243,7 +281,7 @@ export async function updateBookingStatus(
 }
 
 export async function updateBookingWithStripeData(
-  id: number,
+  id: string,
   stripeSessionId: string,
   stripePaymentIntentId: string
 ) {
@@ -273,7 +311,7 @@ export async function getBookingByStripeSessionId(sessionId: string) {
 }
 
 export async function checkBookingConflict(
-  practitionerId: number,
+  practitionerId: string,
   bookingTime: Date
 ) {
   const db = await getDb();

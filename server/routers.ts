@@ -29,8 +29,9 @@ export const appRouter = router({
 
       const db = await getDb();
       if (!db) {
-        console.log(`[Router] Database not available, using mock practitioners`);
-        return getMockPractitioners();
+        console.error(`[Router] Database not available`);
+
+        throw new Error("Database not available");
       }
 
       try {
@@ -39,11 +40,9 @@ export const appRouter = router({
           .from(practitioners);
 
         console.log(`[Router] Found ${result.length} practitioners in database`);
-        return result.length > 0 ? result : getMockPractitioners();
-      } catch (error) {
-        console.error(`[Router] Error fetching practitioners:`, error);
-        console.log(`[Router] Falling back to mock practitioners`);
-        return getMockPractitioners();
+        return result;
+      } catch (error) {    
+        throw new Error("Error fetching practitioners");
       }
     }),
   }),
@@ -66,7 +65,7 @@ export const appRouter = router({
      * Returns time slots for the next 7-14 days
      */
     getAvailability: publicProcedure
-      .input(z.object({ practitionerId: z.number() }))
+      .input(z.object({ practitionerId: z.string().uuid() }))
       .query(async ({ input }) => {
         console.log(
           `[Router] getAvailability called with practitionerId: ${input.practitionerId}`
@@ -104,7 +103,7 @@ export const appRouter = router({
     createBooking: publicProcedure
       .input(
         z.object({
-          practitionerId: z.number(),
+          practitionerId: z.string().uuid(),
           clientName: z.string().min(1),
           clientEmail: z.string().email(),
           clientPhone: z.string().min(1),
@@ -112,64 +111,89 @@ export const appRouter = router({
         })
       )
       .mutation(async ({ input }) => {
-        const practitioner = await getPractitioner(input.practitionerId);
-        if (!practitioner) {
-          throw new Error("Practitioner not found");
-        }
+        try {
+          console.log(`[Booking] Starting booking creation for practitioner ${input.practitionerId}`);
+          
+          const practitioner = await getPractitioner(input.practitionerId);
+          if (!practitioner) {
+            console.error(`[Booking] Practitioner ${input.practitionerId} not found`);
+            throw new Error("Practitioner not found");
+          }
 
-        // Check for booking conflicts at the same time slot
-        const bookingTime = new Date(input.bookingTime);
-        const existingBooking = await checkBookingConflict(
-          input.practitionerId,
-          bookingTime
-        );
-        if (existingBooking) {
-          throw new Error(
-            "This time slot is already booked. Please select another time."
+          console.log(`[Booking] Practitioner found: ${practitioner.name} (${practitioner.id})`);
+
+          // Check for booking conflicts at the same time slot
+          const bookingTime = new Date(input.bookingTime);
+          console.log(`[Booking] Checking for conflicts at ${bookingTime.toISOString()}`);
+          
+          const existingBooking = await checkBookingConflict(
+            input.practitionerId,
+            bookingTime
           );
+          if (existingBooking) {
+            console.warn(`[Booking] Conflict detected: booking ${existingBooking.id} already exists`);
+            throw new Error(
+              "This time slot is already booked. Please select another time."
+            );
+          }
+
+          // Create booking in database with pending status
+          console.log(`[Booking] Creating booking for practitioner ${input.practitionerId}`);
+          const bookingData = {
+            practitionerId: input.practitionerId,
+            clientName: input.clientName,
+            clientEmail: input.clientEmail,
+            clientPhone: input.clientPhone,
+            bookingTime: bookingTime,
+            status: "pending" as const,
+            amount: practitioner.hourlyRate,
+            stripeSessionId: null,
+            stripePaymentIntentId: null,
+          };
+          
+          console.log(`[Booking] Booking data prepared:`, {
+            ...bookingData,
+            bookingTime: bookingData.bookingTime.toISOString(),
+          });
+          
+          const booking = await createBooking(bookingData);
+
+          if (!booking || !booking.id) {
+            console.error(`[Booking] Failed to create booking: no ID returned`);
+            throw new Error("Failed to create booking");
+          }
+
+          console.log(`[Booking] Booking ${booking.id} created with status: pending`);
+
+          // Create real Stripe checkout session
+          console.log(`[Booking] Creating Stripe checkout session for booking ${booking.id}`);
+          const checkoutSession = await createCheckoutSession({
+            amount: practitioner.hourlyRate,
+            currency: "GBP",
+            clientEmail: input.clientEmail,
+            clientName: input.clientName,
+            bookingId: booking.id,
+          });
+
+          console.log(`[Booking] Stripe checkout session created: ${checkoutSession.id}`);
+
+          // Update booking with Stripe session ID
+          await updateBookingWithStripeData(booking.id, checkoutSession.id, "");
+
+          console.log(`[Booking] Booking ${booking.id} updated with Stripe session ID`);
+          console.log(`[Booking] Checkout URL: ${checkoutSession.url}`);
+
+          return {
+            bookingId: booking.id,
+            checkoutUrl: checkoutSession.url,
+            amount: practitioner.hourlyRate,
+          };
+        } catch (error: any) {
+          console.error(`[Booking] Error in createBooking mutation:`, error);
+          console.error(`[Booking] Error message:`, error.message);
+          console.error(`[Booking] Error stack:`, error.stack);
+          throw error;
         }
-
-        // Create booking in database with pending status
-        console.log(`[Booking] Creating booking for practitioner ${input.practitionerId}`);
-        const booking = await createBooking({
-          practitionerId: input.practitionerId,
-          clientName: input.clientName,
-          clientEmail: input.clientEmail,
-          clientPhone: input.clientPhone,
-          bookingTime: new Date(input.bookingTime),
-          status: "pending",
-          amount: practitioner.hourlyRate,
-        });
-
-        if (!booking || !booking.id) {
-          throw new Error("Failed to create booking");
-        }
-
-        console.log(`[Booking] Booking ${booking.id} created with status: pending`);
-
-        // Create real Stripe checkout session
-        console.log(`[Booking] Creating Stripe checkout session for booking ${booking.id}`);
-        const checkoutSession = await createCheckoutSession({
-          amount: practitioner.hourlyRate,
-          currency: "GBP",
-          clientEmail: input.clientEmail,
-          clientName: input.clientName,
-          bookingId: booking.id,
-        });
-
-        console.log(`[Booking] Stripe checkout session created: ${checkoutSession.id}`);
-
-        // Update booking with Stripe session ID
-        await updateBookingWithStripeData(booking.id, checkoutSession.id, "");
-
-        console.log(`[Booking] Booking ${booking.id} updated with Stripe session ID`);
-        console.log(`[Booking] Checkout URL: ${checkoutSession.url}`);
-
-        return {
-          bookingId: booking.id,
-          checkoutUrl: checkoutSession.url,
-          amount: practitioner.hourlyRate,
-        };
       }),
 
     /**
@@ -209,7 +233,6 @@ export const appRouter = router({
               startTime: booking.bookingTime,
               endTime: endTime,
               title: `Consultation with ${practitioner.name}`,
-              description: `Booked via BookingFlow - Payment confirmed`,
             });
 
             if (calComResult.success) {
@@ -233,7 +256,7 @@ export const appRouter = router({
      * Get booking details by ID
      */
     getBooking: publicProcedure
-      .input(z.object({ bookingId: z.number() }))
+      .input(z.object({ bookingId: z.string().uuid() }))
       .query(async ({ input }) => {
         const booking = await getBooking(input.bookingId);
         if (!booking) {
@@ -261,7 +284,7 @@ export const appRouter = router({
     cancelBooking: publicProcedure
       .input(
         z.object({
-          bookingId: z.number(),
+          bookingId: z.string().uuid(),
         })
       )
       .mutation(async ({ input }) => {
