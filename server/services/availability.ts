@@ -50,23 +50,15 @@ async function getCalComAvailability(
 
   try {
     // Map practitioner ID to Cal.com user/event type
-    // Using single CALCOM_USER_ID for all practitioners, each with their own event type
-    calComUserId = process.env.CALCOM_USER_ID;
-    
-    // Try multiple strategies to find eventTypeId:
-    // 1. Try with UUID as-is (with hífens substituídos por underscores)
-    // 2. Try with UUID sem hífens
-    // 3. Try with primeiros 8 caracteres do UUID
-    // 4. Try default event type
+    // Using practitionerId as the Cal.com user ID
+    const calComUserId = process.env.CALCOM_USER_ID;
     const uuidNormalized = practitionerId.replace(/-/g, '_');
     const uuidNoHyphens = practitionerId.replace(/-/g, '');
     const uuidShort = practitionerId.substring(0, 8);
-    
-    eventTypeId = 
-      process.env[`CALCOM_EVENT_TYPE_${uuidNormalized}`] ||
-      process.env[`CALCOM_EVENT_TYPE_${uuidNoHyphens}`] ||
-      process.env[`CALCOM_EVENT_TYPE_${uuidShort}`] ||
-      process.env.CALCOM_EVENT_TYPE_DEFAULT;
+    const eventTypeId = process.env[`CALCOM_EVENT_TYPE_${uuidNormalized}`] 
+    || process.env[`CALCOM_EVENT_TYPE_${uuidNoHyphens}`] 
+    || process.env[`CALCOM_EVENT_TYPE_${uuidShort}`] 
+    || process.env.CALCOM_EVENT_TYPE_DEFAULT;
 
     if (!calComUserId || !eventTypeId) {
       console.warn(

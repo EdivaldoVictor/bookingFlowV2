@@ -117,9 +117,7 @@ export async function getUserByOpenId(openId: string) {
 export async function getPractitioner(id: string) {
   const db = await getDb();
   if (!db) {
-    // Fallback to mock data if database is not available
-    console.log("[DB] Database not available, using mock data");
-    return getMockPractitioner(id);
+    throw new Error("Database not available");
   }
 
   const result = await db
@@ -129,88 +127,12 @@ export async function getPractitioner(id: string) {
     .limit(1);
   const practitioner = result.length > 0 ? result[0] : undefined;
 
-  // If not found in database, try mock data
+  // If not found in database, return error
   if (!practitioner) {
-    console.log(
-      `[DB] Practitioner ${id} not found in database, using mock data`
-    );
-    return getMockPractitioner(id);
+    throw new Error(`Practitioner ${id} not found in database`);
   }
 
   return practitioner;
-}
-
-// Fixed UUIDs for mock practitioners (for consistency in development)
-const MOCK_PRACTITIONER_IDS = {
-  sarah: "550e8400-e29b-41d4-a716-446655440001",
-  michael: "550e8400-e29b-41d4-a716-446655440002",
-  emma: "550e8400-e29b-41d4-a716-446655440003",
-} as const;
-
-function getMockPractitioner(id: string) {
-  const mockPractitioners = [
-    {
-      id: MOCK_PRACTITIONER_IDS.sarah,
-      name: "Dr. Sarah Johnson",
-      email: "sarah@example.com",
-      description: "Clinical Psychologist",
-      hourlyRate: 8000,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    },
-    {
-      id: MOCK_PRACTITIONER_IDS.michael,
-      name: "Dr. Michael Chen",
-      email: "michael@example.com",
-      description: "Therapist",
-      hourlyRate: 7500,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    },
-    {
-      id: MOCK_PRACTITIONER_IDS.emma,
-      name: "Emma Wilson",
-      email: "emma@example.com",
-      description: "Counselor",
-      hourlyRate: 6000,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    },
-  ];
-
-  return mockPractitioners.find(p => p.id === id);
-}
-
-function getMockPractitioners() {
-  return [
-    {
-      id: MOCK_PRACTITIONER_IDS.sarah,
-      name: "Dr. Sarah Johnson",
-      email: "sarah@example.com",
-      description: "Clinical Psychologist",
-      hourlyRate: 8000,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    },
-    {
-      id: MOCK_PRACTITIONER_IDS.michael,
-      name: "Dr. Michael Chen",
-      email: "michael@example.com",
-      description: "Therapist",
-      hourlyRate: 7500,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    },
-    {
-      id: MOCK_PRACTITIONER_IDS.emma,
-      name: "Emma Wilson",
-      email: "emma@example.com",
-      description: "Counselor",
-      hourlyRate: 6000,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    },
-  ];
 }
 
 export async function createBooking(booking: InsertBooking) {
