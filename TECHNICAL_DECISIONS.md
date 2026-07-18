@@ -86,37 +86,29 @@ vite-express-booking/
 
 **File:** `server/services/availability.ts`
 
-The real Cal.com integration fetches availability slots from the actual API:
+The real Cal.com integration uses **API v2** (v1 is decommissioned):
 
-- **API Endpoint:** `https://api.cal.com/v1/availability`
-- **Authentication:** Bearer token with `CALCOM_API_KEY`
-- **Mapping:** Practitioner IDs mapped to Cal.com user IDs and event types
-- **Slot Generation:** Based on real working hours and busy slots
-- **Timezone:** Supports multiple timezones (currently America/Recife)
+- **Slots:** `GET https://api.cal.com/v2/slots` (`cal-api-version: 2024-09-04`)
+- **Create booking:** `POST https://api.cal.com/v2/bookings` (`cal-api-version: 2026-02-25`)
+- **Cancel booking:** `POST https://api.cal.com/v2/bookings/:uid/cancel`
+- **Authentication:** `Authorization: Bearer <CALCOM_API_KEY>` (no `apiKey` query param)
+- **Mapping:** Practitioner UUIDs → Cal.com event type IDs via env vars
+- **Timezone:** Defaults to America/Recife (`CALCOM_TIMEZONE` override)
 - **Duration:** 14 days ahead availability
 
 **Environment Variables Required:**
 ```bash
-CALCOM_API_KEY=cal_live_e0a3714f1b10d5da9a7c5384777535e3
-CALCOM_API_URL=https://api.cal.com/v1
-CALCOM_USER_ID=1967202            # Single user ID for all practitioners
-CALCOM_EVENT_TYPE_1=4071936       # Event type for practitioner 1
-CALCOM_EVENT_TYPE_2=...           # Event type for practitioner 2
-CALCOM_EVENT_TYPE_3=...           # Event type for practitioner 3
+CALCOM_API_KEY=cal_live_...
+CALCOM_API_URL=https://api.cal.com/v2
+CALCOM_EVENT_TYPE_DEFAULT=4071936
+# Or per-practitioner: CALCOM_EVENT_TYPE_<uuid_without_hyphens>=...
 ```
-
-**Current Working Configuration:**
-- Practitioner 1 → User ID: your_user_ID, Event Type: your_event_type
-- Working Hours: 07:20 to 12:00 (Brazil timezone)
-- Available Days: Monday to Friday
-- Session Duration: 1 hour
 
 ```typescript
 export async function getAvailabilityForPractitioner(
-  practitionerId: number
+  practitionerId: string
 ): Promise<TimeSlot[]> {
-  // Fetches real availability from Cal.com API
-  // Falls back to mock data if API fails
+  // Fetches real available slots from Cal.com API v2 GET /v2/slots
   const slots = await getCalComAvailability(practitionerId);
   return slots;
 }
@@ -124,30 +116,28 @@ export async function getAvailabilityForPractitioner(
 
 ### Real Cal.com Integration Strategy
 
-If integrating with real Cal.com API, follow these steps:
-
 1. **Obtain API Credentials**
    - Sign up at cal.com
-   - Generate API key from settings
-   - Store as environment variable: `CAL_COM_API_KEY`
+   - Generate API key from Settings → Security
+   - Store as environment variable: `CALCOM_API_KEY`
 
-2. **Replace Mock Service**
+2. **Call API v2 endpoints**
 
    ```typescript
-   // server/services/availability.ts
-   export async function getAvailabilityForPractitioner(
-     practitionerId: number
-   ) {
-     const response = await fetch(`https://api.cal.com/v1/availability`, {
-       headers: { Authorization: `Bearer ${process.env.CAL_COM_API_KEY}` },
-       body: JSON.stringify({ userId: practitionerId, dateFrom, dateTo }),
-     });
-     return response.json();
-   }
+   // GET /v2/slots — available time slots
+   const response = await fetch(
+     `https://api.cal.com/v2/slots?eventTypeId=${eventTypeId}&start=${start}&end=${end}&format=range`,
+     {
+       headers: {
+         Authorization: `Bearer ${process.env.CALCOM_API_KEY}`,
+         "cal-api-version": "2024-09-04",
+       },
+     }
+   );
    ```
 
 3. **Update tRPC Procedure**
-   - Change from sync `getAvailabilityForPractitioner()` to async
+   - Async `getAvailabilityForPractitioner()`
    - Add error handling for API failures
    - Implement caching to reduce API calls
 
@@ -313,8 +303,9 @@ echo $STRIPE_WEBHOOK_SECRET
 
 ```bash
 # Test availability endpoint
-curl -X GET "https://cal.com/api/v1/availability" \
-  -H "Authorization: Bearer $CAL_COM_API_KEY" \
+curl -X GET "https://api.cal.com/v2/slots?eventTypeId=4071936&start=2026-07-19&end=2026-08-02&format=range" \
+  -H "Authorization: Bearer $CALCOM_API_KEY" \
+  -H "cal-api-version: 2024-09-04" \
   -H "Content-Type: application/json"
 ```
 
@@ -694,7 +685,7 @@ This implementation provides a **production-ready booking system** with **real C
    ↓
 3. Backend → Database: SELECT * FROM practitioners WHERE id = 1
    ↓
-4. Backend → Cal.com: GET /availability?userId=1967202&eventTypeId=4071936
+4. Backend → Cal.com: GET /v2/slots?eventTypeId=4071936&start=...&end=...&format=range
    ↓
 5. Cal.com → Backend: { busy: [], dateRanges: [...], workingHours: [...] }
    ↓

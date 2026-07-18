@@ -18,6 +18,7 @@ import { createCalComBooking, cancelCalComBooking } from "./services/availabilit
 import { getAvailabilityForPractitioner } from "./services/availability";
 import { createCheckoutSession } from "./services/stripe";
 
+
 export const appRouter = router({
   // if you need to use socket.io, read and register route in server/_core/index.ts, all api should start with '/api/' so that the gateway can route correctly
   system: systemRouter,
@@ -80,7 +81,7 @@ export const appRouter = router({
 
         console.log(`[Router] Calling getAvailabilityForPractitioner...`);
         const slots = await getAvailabilityForPractitioner(
-          input.practitionerId
+          practitioner.id
         );
         console.log(
           `[Router] Got ${slots.length} slots from availability service`
@@ -127,7 +128,7 @@ export const appRouter = router({
           console.log(`[Booking] Checking for conflicts at ${bookingTime.toISOString()}`);
           
           const existingBooking = await checkBookingConflict(
-            input.practitionerId,
+            practitioner.id,
             bookingTime
           );
           if (existingBooking) {
@@ -140,7 +141,7 @@ export const appRouter = router({
           // Create booking in database with pending status
           console.log(`[Booking] Creating booking for practitioner ${input.practitionerId}`);
           const bookingData = {
-            practitionerId: input.practitionerId,
+            practitionerId: practitioner.id,
             clientName: input.clientName,
             clientEmail: input.clientEmail,
             clientPhone: input.clientPhone,
