@@ -6,20 +6,10 @@ import { Practitioner } from "../drizzle/schema";
 // Mock the entire db module
 const mockPractitioner: Practitioner = {
   id: 1,
-  name: "Dr. Sarah Johnson",
-  email: "sarah@example.com",
-  description: "Clinical Psychologist",
-  hourlyRate: 8000, // £80
-  createdAt: new Date(),
-  updatedAt: new Date(),
-};
-
-const mockPractitioner2: Practitioner = {
-  id: 2,
-  name: "Dr. Michael Chen",
-  email: "michael@example.com",
-  description: "Therapist",
-  hourlyRate: 7500, // £75
+  name: "Bispo barber",
+  email: "bispo@example.com",
+  description: "Barber",
+  hourlyRate: 6000, // £60
   createdAt: new Date(),
   updatedAt: new Date(),
 };
@@ -30,8 +20,7 @@ const mockBookings: any[] = [];
 // Mock the database functions
 vi.mock("./db", () => ({
   getPractitioner: vi.fn(async (id: number) => {
-    if (id === 1) return mockPractitioner;
-    if (id === 2) return mockPractitioner2;
+    if (id === 1 || id === 2) return mockPractitioner;
     return undefined;
   }),
   createBooking: vi.fn(async (booking: any) => {

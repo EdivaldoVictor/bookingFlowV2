@@ -265,9 +265,9 @@ function BarberCard({
 
       <div className="border-t border-border/60 pt-4 mb-4">
         <p className="text-2xl font-bold text-orange-gradient">
-          £{(practitioner.hourlyRate / 100).toFixed(2)}
+  
         </p>
-        <p className="text-xs text-muted-foreground">por hora</p>
+        <p className="text-xs text-muted-foreground"></p>
       </div>
 
       <Button asChild className="w-full btn-barber border-0">

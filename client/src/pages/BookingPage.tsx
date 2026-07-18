@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -14,9 +14,26 @@ import {
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { Link } from "wouter";
+import {
+  BOOKING_SERVICES,
+  formatBRL,
+  getBookingServiceById,
+} from "@shared/bookingServices";
 
 interface BookingPageProps {
   practitionerId: string;
+}
+
+function getDayKey(date: Date) {
+  return `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;
+}
+
+function formatDayLabel(date: Date) {
+  return date.toLocaleDateString("pt-BR", {
+    weekday: "short",
+    day: "2-digit",
+    month: "short",
+  });
 }
 
 // UUID validation regex
@@ -31,6 +48,8 @@ export default function BookingPage({ practitionerId }: BookingPageProps) {
     clientEmail: "",
     clientPhone: "",
   });
+  const [selectedServiceId, setSelectedServiceId] = useState(BOOKING_SERVICES[0].id);
+  const [selectedDateKey, setSelectedDateKey] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const isValidUUID = UUID_REGEX.test(practitionerId);
@@ -89,6 +108,64 @@ export default function BookingPage({ practitionerId }: BookingPageProps) {
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
+  const selectedService = getBookingServiceById(selectedServiceId) ?? BOOKING_SERVICES[0];
+
+  const availableDays = useMemo(() => {
+    const slots = finalAvailabilityData?.slots ?? [];
+    const grouped = new Map<string, { key: string; label: string; date: Date; slots: typeof slots }>();
+
+    slots.forEach(slot => {
+      const date = new Date(slot.startTime);
+      const dayKey = getDayKey(date);
+      const existing = grouped.get(dayKey);
+      if (existing) {
+        existing.slots.push(slot);
+      } else {
+        grouped.set(dayKey, {
+          key: dayKey,
+          label: formatDayLabel(date),
+          date,
+          slots: [slot],
+        });
+      }
+    });
+
+    return Array.from(grouped.values()).sort((a, b) => a.date.getTime() - b.date.getTime());
+  }, [finalAvailabilityData?.slots]);
+
+  useEffect(() => {
+    if (!availableDays.length) {
+      setSelectedDateKey(null);
+      setSelectedSlot(null);
+      return;
+    }
+
+    if (!selectedDateKey || !availableDays.some(day => day.key === selectedDateKey)) {
+      setSelectedDateKey(availableDays[0].key);
+      setSelectedSlot(null);
+    }
+  }, [availableDays, selectedDateKey]);
+
+  const selectedDay = availableDays.find(day => day.key === selectedDateKey) ?? availableDays[0];
+  const daySlots = selectedDay?.slots ?? [];
+
+  useEffect(() => {
+    if (selectedSlot && !daySlots.some(slot => slot.id === selectedSlot)) {
+      setSelectedSlot(null);
+    }
+  }, [daySlots, selectedSlot]);
+
+  const goToDay = (direction: -1 | 1) => {
+    if (!availableDays.length) return;
+
+    const currentIndex = availableDays.findIndex(day => day.key === selectedDateKey);
+    const nextIndex = currentIndex === -1
+      ? 0
+      : Math.max(0, Math.min(availableDays.length - 1, currentIndex + direction));
+    setSelectedDateKey(availableDays[nextIndex].key);
+    setSelectedSlot(null);
+  };
+
   const createBookingMutation = trpc.bookings.createBooking.useMutation({
     onSuccess: data => {
       console.log("[Booking] Booking created successfully:", data);
@@ -145,6 +222,10 @@ export default function BookingPage({ practitionerId }: BookingPageProps) {
         clientEmail: formData.clientEmail,
         clientPhone: formData.clientPhone,
         bookingTime: selectedSlotData.startTime.toISOString(),
+        serviceId: selectedService.id,
+        serviceName: selectedService.name,
+        servicePrice: selectedService.price,
+        serviceDurationMinutes: selectedService.durationMinutes,
       });
     } catch (error) {
       console.error("[Booking] Booking error:", error);
@@ -263,62 +344,148 @@ export default function BookingPage({ practitionerId }: BookingPageProps) {
             </span>
           </h1>
           <p className="text-muted-foreground">
-            £{(finalAvailabilityData.practitioner.hourlyRate / 100).toFixed(2)}{" "}
-            por hora
+            Escolha o serviço e confirme o horário antes de agendar.
           </p>
         </div>
 
         {/* Available Slots */}
         <Card className="card-barber p-6 mb-8">
-          <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
-            <Calendar className="w-5 h-5 text-primary" />
-            Horários disponíveis ({finalAvailabilityData.slots.length})
-          </h2>
+          <div className="flex items-center justify-between gap-3 mb-4">
+            <h2 className="text-xl font-semibold flex items-center gap-2">
+              <Calendar className="w-5 h-5 text-primary" />
+              Escolha o dia
+            </h2>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => goToDay(-1)}
+                className="rounded-full border border-border/60 px-2.5 py-1 text-sm text-muted-foreground hover:border-primary/50 hover:text-primary"
+              >
+                ←
+              </button>
+              <span className="text-sm font-medium text-foreground">
+                {selectedDay ? selectedDay.label : "--"}
+              </span>
+              <button
+                type="button"
+                onClick={() => goToDay(1)}
+                className="rounded-full border border-border/60 px-2.5 py-1 text-sm text-muted-foreground hover:border-primary/50 hover:text-primary"
+              >
+                →
+              </button>
+            </div>
+          </div>
 
-          {finalAvailabilityData.slots.length === 0 ? (
+          {availableDays.length === 0 ? (
             <p className="text-muted-foreground">
               Nenhum horário disponível nos próximos 14 dias
             </p>
           ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-              {finalAvailabilityData.slots.map(slot => (
+            <>
+              <div className="mb-4 flex flex-wrap gap-2">
+                {availableDays.map(day => {
+                  const isActive = day.key === selectedDateKey;
+                  return (
+                    <button
+                      key={day.key}
+                      type="button"
+                      onClick={() => {
+                        setSelectedDateKey(day.key);
+                        setSelectedSlot(null);
+                      }}
+                      className={`rounded-full border px-3 py-1.5 text-sm transition-all ${
+                        isActive
+                          ? "border-transparent bg-orange-gradient text-black shadow-orange-glow"
+                          : "border-border/60 bg-black/20 text-foreground hover:border-primary/50"
+                      }`}
+                    >
+                      {day.label}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                {daySlots.length === 0 ? (
+                  <p className="col-span-full text-sm text-muted-foreground">
+                    Nenhum horário disponível para este dia.
+                  </p>
+                ) : (
+                  daySlots.map(slot => (
+                    <button
+                      key={slot.id}
+                      type="button"
+                      onClick={() => handleSlotSelect(slot.id)}
+                      className={`p-3 rounded-lg border-2 transition-all flex flex-col items-center gap-1 ${
+                        selectedSlot === slot.id
+                          ? "border-transparent bg-orange-gradient text-black shadow-orange-glow"
+                          : "border-border/60 bg-black/20 hover:border-primary/50 text-foreground"
+                      }`}
+                    >
+                      <Clock
+                        className={`w-4 h-4 ${
+                          selectedSlot === slot.id ? "text-black" : "text-primary"
+                        }`}
+                      />
+                      <span className="text-sm font-medium">
+                        {slot.startTime.toLocaleTimeString([], {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </span>
+                      <span
+                        className={`text-xs ${
+                          selectedSlot === slot.id
+                            ? "text-black/70"
+                            : "text-muted-foreground"
+                        }`}
+                      >
+                        {slot.startTime.toLocaleDateString([], {
+                          month: "short",
+                          day: "numeric",
+                        })}
+                      </span>
+                    </button>
+                  ))
+                )}
+              </div>
+            </>
+          )}
+        </Card>
+
+        <Card className="card-barber p-6 mb-8">
+          <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
+            <Scissors className="w-5 h-5 text-primary" />
+            Serviços disponíveis
+          </h2>
+          <div className="grid gap-3">
+            {BOOKING_SERVICES.map(service => {
+              const isSelected = selectedServiceId === service.id;
+              return (
                 <button
-                  key={slot.id}
+                  key={service.id}
                   type="button"
-                  onClick={() => handleSlotSelect(slot.id)}
-                  className={`p-3 rounded-lg border-2 transition-all flex flex-col items-center gap-1 ${
-                    selectedSlot === slot.id
-                      ? "border-transparent bg-orange-gradient text-black shadow-orange-glow"
-                      : "border-border/60 bg-black/20 hover:border-primary/50 text-foreground"
+                  onClick={() => setSelectedServiceId(service.id)}
+                  className={`rounded-lg border p-4 text-left transition-all ${
+                    isSelected
+                      ? "border-primary bg-primary/10 shadow-orange-glow"
+                      : "border-border/60 bg-black/20 hover:border-primary/50"
                   }`}
                 >
-                  <Clock
-                    className={`w-4 h-4 ${
-                      selectedSlot === slot.id ? "text-black" : "text-primary"
-                    }`}
-                  />
-                  <span className="text-sm font-medium">
-                    {slot.startTime.toLocaleTimeString([], {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
-                  </span>
-                  <span
-                    className={`text-xs ${
-                      selectedSlot === slot.id
-                        ? "text-black/70"
-                        : "text-muted-foreground"
-                    }`}
-                  >
-                    {slot.startTime.toLocaleDateString([], {
-                      month: "short",
-                      day: "numeric",
-                    })}
-                  </span>
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="font-semibold text-foreground">{service.name}</p>
+                      <p className="text-sm text-muted-foreground">{service.description}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-semibold text-primary">{formatBRL(service.price)}</p>
+                      <p className="text-xs text-muted-foreground">{service.durationMinutes} min</p>
+                    </div>
+                  </div>
                 </button>
-              ))}
-            </div>
-          )}
+              );
+            })}
+          </div>
         </Card>
 
         {/* Booking Form */}
@@ -390,10 +557,7 @@ export default function BookingPage({ practitionerId }: BookingPageProps) {
               ) : (
                 <>
                   <Scissors className="w-4 h-4" />
-                  Agendar — £
-                  {(
-                    finalAvailabilityData.practitioner.hourlyRate / 100
-                  ).toFixed(2)}
+                  Agendar — {formatBRL(selectedService.price)}
                 </>
               )}
             </Button>

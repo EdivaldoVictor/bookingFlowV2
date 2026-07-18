@@ -8,24 +8,10 @@ dotenv.config({ path: ".env.local" });
 
 const practitionersData = [
   {
-    id: process.env.PRACTITIONER_SARAH_UUID as string,
-    name: "Dr. Sarah Johnson",
-    email: "sarah@example.com",
-    description: "Clinical Psychologist",
-    hourlyRate: 8000, // £80
-  },
-  {
-    id: process.env.PRACTITIONER_MICHAEL_UUID as string,
-    name: "Dr. Michael Chen",
-    email: "michael@example.com",
-    description: "Therapist",
-    hourlyRate: 7500, // £75
-  },
-  {
-    id: process.env.PRACTITIONER_EMMA_UUID as string,
-    name: "Emma Wilson",
-    email: "emma@example.com",
-    description: "Counselor",
+    id: process.env.PRACTITIONER_BISPO_UUID as string,
+    name: "Bispo barber",
+    email: "bispo@example.com",
+    description: "Barber",
     hourlyRate: 6000, // £60
   },
 ];

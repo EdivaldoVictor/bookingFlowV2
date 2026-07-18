@@ -109,6 +109,10 @@ export const appRouter = router({
           clientEmail: z.string().email(),
           clientPhone: z.string().min(1),
           bookingTime: z.string().datetime(),
+          serviceId: z.string().optional(),
+          serviceName: z.string().optional(),
+          servicePrice: z.number().optional(),
+          serviceDurationMinutes: z.number().optional(),
         })
       )
       .mutation(async ({ input }) => {
@@ -138,6 +142,9 @@ export const appRouter = router({
             );
           }
 
+          const selectedServicePrice = input.servicePrice ?? 25;
+          const selectedServiceName = input.serviceName ?? "Cabelo";
+
           // Create booking in database with pending status
           console.log(`[Booking] Creating booking for practitioner ${input.practitionerId}`);
           const bookingData = {
@@ -147,7 +154,7 @@ export const appRouter = router({
             clientPhone: input.clientPhone,
             bookingTime: bookingTime,
             status: "pending" as const,
-            amount: practitioner.hourlyRate,
+            amount: selectedServicePrice * 100,
             stripeSessionId: null,
             stripePaymentIntentId: null,
           };
@@ -169,11 +176,12 @@ export const appRouter = router({
           // Create real Stripe checkout session
           console.log(`[Booking] Creating Stripe checkout session for booking ${booking.id}`);
           const checkoutSession = await createCheckoutSession({
-            amount: practitioner.hourlyRate,
-            currency: "GBP",
+            amount: selectedServicePrice * 100,
+            currency: "BRL",
             clientEmail: input.clientEmail,
             clientName: input.clientName,
             bookingId: booking.id,
+            serviceName: selectedServiceName,
           });
 
           console.log(`[Booking] Stripe checkout session created: ${checkoutSession.id}`);
@@ -187,7 +195,7 @@ export const appRouter = router({
           return {
             bookingId: booking.id,
             checkoutUrl: checkoutSession.url,
-            amount: practitioner.hourlyRate,
+            amount: selectedServicePrice * 100,
           };
         } catch (error: any) {
           console.error(`[Booking] Error in createBooking mutation:`, error);

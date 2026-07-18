@@ -47,6 +47,7 @@ export async function createCheckoutSession(params: {
   clientEmail: string;
   clientName: string;
   bookingId: string;
+  serviceName?: string;
 }): Promise<CheckoutSession> {
   const stripe = getStripeClient();
 
@@ -58,8 +59,8 @@ export async function createCheckoutSession(params: {
         price_data: {
           currency: params.currency.toLowerCase(),
           product_data: {
-            name: "Practitioner Booking",
-            description: `Booking for ${params.clientName}`,
+            name: params.serviceName || "Booking",
+            description: `Agendamento para ${params.clientName}`,
           },
           unit_amount: params.amount, // Amount in pence/cents
         },
