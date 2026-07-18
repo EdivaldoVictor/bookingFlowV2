@@ -281,20 +281,16 @@ export async function createCalComBooking(bookingData: {
       attendee.phoneNumber = bookingData.clientPhone;
     }
 
+    // Do not set location.type = "attendeePhone" here.
+    // Event types configured for video (Google Meet, Zoom, etc.) only accept
+    // location type "integration". Omitting location lets Cal.com use the
+    // event type's default. Phone is still sent on attendee.phoneNumber above.
     const bookingPayload: Record<string, unknown> = {
       eventTypeId: Number(eventTypeId),
       start: bookingData.startTime.toISOString(),
       attendee,
       metadata: {},
     };
-
-    // Optional: pass phone as attendee location if provided
-    if (bookingData.clientPhone) {
-      bookingPayload.location = {
-        type: "attendeePhone",
-        phone: bookingData.clientPhone,
-      };
-    }
 
     console.log(`[Cal.com] Creating booking with payload:`, bookingPayload);
     console.log(`[Cal.com] Request URL: ${calComUrl}/bookings`);
