@@ -16,6 +16,7 @@
     "db:reset": "tsx scripts/db.ts all",
     "db:cleanup-practitioners": "tsx scripts/cleanup-practitioners.ts",
     "db:push": "drizzle-kit push --yes",
+    "db:fix-auth": "tsx scripts/fix-auth-db.ts",
     "db:migrate-uuid": "tsx scripts/migrate-to-uuid.ts"
   },
   "dependencies": {

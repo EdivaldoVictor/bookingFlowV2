@@ -1,7 +1,8 @@
 import { COOKIE_NAME } from "@shared/const";
+import { eq } from "drizzle-orm";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
-import { publicProcedure, router } from "./_core/trpc";
+import { adminProcedure, protectedProcedure, publicProcedure, router } from "./_core/trpc";
 import { z } from "zod";
 import {
   getPractitioner,
@@ -13,10 +14,10 @@ import {
   updateBookingWithStripeData,
   getDb,
 } from "./db";
-import { practitioners } from "../drizzle/schema";
+import { bookings, practitioners, users } from "../drizzle/schema";
 import { createCalComBooking, cancelCalComBooking } from "./services/availability";
 import { getAvailabilityForPractitioner } from "./services/availability";
-import { createCheckoutSession } from "./services/stripe";
+import { createCheckoutSession, createRefund } from "./services/stripe";
 
 
 export const appRouter = router({
@@ -49,7 +50,107 @@ export const appRouter = router({
   }),
 
   auth: router({
-    me: publicProcedure.query(opts => opts.ctx.user),
+    me: publicProcedure.query(opts => {
+      if (!opts.ctx.user) return null;
+      const { toPublicUser } = require("./_core/publicUser") as typeof import("./_core/publicUser");
+      return toPublicUser(opts.ctx.user);
+    }),
+    register: publicProcedure
+      .input(
+        z.object({
+          name: z.string().min(2),
+          email: z.string().email(),
+          password: z.string().min(6),
+        })
+      )
+      .mutation(async ({ input, ctx }) => {
+        const db = await getDb();
+        if (!db) throw new Error("Database not available");
+
+        const normalizedEmail = input.email.trim().toLowerCase();
+        const existing = await db.select().from(users).where(eq(users.email, normalizedEmail)).limit(1);
+        if (existing.length > 0) {
+          throw new Error("Email already registered");
+        }
+
+        const { resolveUserRole } = await import("./_core/roles");
+        const { hashPassword } = await import("./_core/password");
+        const role = resolveUserRole({ email: normalizedEmail, openId: `local:${normalizedEmail}` });
+        const passwordHash = await hashPassword(input.password);
+
+        const openId = `local:${normalizedEmail}`;
+        const { upsertUser } = await import("./db");
+        await upsertUser({
+          openId,
+          name: input.name,
+          email: normalizedEmail,
+          passwordHash,
+          loginMethod: "local",
+          role,
+          lastSignedIn: new Date(),
+        });
+
+        const cookieOptions = getSessionCookieOptions(ctx.req);
+        ctx.res.cookie(COOKIE_NAME, await import("./_core/sdk").then(m => m.sdk.createSessionToken(openId, { name: input.name, expiresInMs: 31536000000 })), {
+          ...cookieOptions,
+          maxAge: 31536000000,
+        });
+
+        return { success: true, user: { openId, name: input.name, email: normalizedEmail, role } };
+      }),
+    login: publicProcedure
+      .input(
+        z.object({
+          email: z.string().email(),
+          password: z.string().min(6),
+        })
+      )
+      .mutation(async ({ input, ctx }) => {
+        const db = await getDb();
+        if (!db) throw new Error("Database not available");
+
+        const normalizedEmail = input.email.trim().toLowerCase();
+        const usersResult = await db.select().from(users).where(eq(users.email, normalizedEmail)).limit(1);
+        const userRecord = usersResult[0];
+
+        const { verifyPassword } = await import("./_core/password");
+        const passwordOk =
+          Boolean(userRecord) && (await verifyPassword(input.password, userRecord.passwordHash));
+
+        if (!userRecord || !passwordOk) {
+          throw new Error("Invalid credentials");
+        }
+
+        const { resolveUserRole } = await import("./_core/roles");
+        const role = resolveUserRole(userRecord);
+
+        // Keep DB role in sync with ADMIN_EMAILS on every login.
+        if (userRecord.role !== role) {
+          const { upsertUser } = await import("./db");
+          await upsertUser({
+            openId: userRecord.openId,
+            email: userRecord.email,
+            role,
+            lastSignedIn: new Date(),
+          });
+        }
+
+        const cookieOptions = getSessionCookieOptions(ctx.req);
+        ctx.res.cookie(COOKIE_NAME, await import("./_core/sdk").then(m => m.sdk.createSessionToken(userRecord.openId, { name: userRecord.name || "", expiresInMs: 31536000000 })), {
+          ...cookieOptions,
+          maxAge: 31536000000,
+        });
+
+        return {
+          success: true,
+          user: {
+            openId: userRecord.openId,
+            name: userRecord.name,
+            email: userRecord.email,
+            role,
+          },
+        };
+      }),
     logout: publicProcedure.mutation(({ ctx }) => {
       const cookieOptions = getSessionCookieOptions(ctx.req);
       ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
@@ -258,6 +359,125 @@ export const appRouter = router({
         return {
           bookingId: booking.id,
           status: "confirmed",
+        };
+      }),
+
+    getUserBookings: protectedProcedure.query(async ({ ctx }) => {
+      const db = await getDb();
+      if (!db) return [];
+
+      const email = ctx.user.email?.trim().toLowerCase();
+      if (!email) return [];
+
+      const rows = await db
+        .select()
+        .from(bookings)
+        .where(eq(bookings.clientEmail, email));
+
+      return rows.sort((a, b) => {
+        const aTime = new Date(a.bookingTime).getTime();
+        const bTime = new Date(b.bookingTime).getTime();
+        return bTime - aTime;
+      });
+    }),
+
+    getAdminBookings: adminProcedure.query(async () => {
+      const db = await getDb();
+      if (!db) return [];
+
+      const rows = await db.select().from(bookings);
+
+      return rows.sort((a, b) => {
+        const aTime = new Date(a.bookingTime).getTime();
+        const bTime = new Date(b.bookingTime).getTime();
+        return bTime - aTime;
+      });
+    }),
+
+    requestRefund: protectedProcedure
+      .input(z.object({ bookingId: z.string().uuid() }))
+      .mutation(async ({ input, ctx }) => {
+        const booking = await getBooking(input.bookingId);
+        if (!booking) {
+          throw new Error("Booking not found");
+        }
+
+        const userEmail = ctx.user.email?.trim().toLowerCase();
+        const isOwner = userEmail && booking.clientEmail.toLowerCase() === userEmail;
+        const { resolveUserRole } = await import("./_core/roles");
+        const isAdmin = resolveUserRole(ctx.user) === "admin";
+
+        if (!isOwner && !isAdmin) {
+          throw new Error("You are not allowed to refund this booking");
+        }
+
+        if (booking.status === "cancelled") {
+          return {
+            bookingId: booking.id,
+            status: booking.status,
+            refunded: false,
+            message: "Booking already cancelled",
+          };
+        }
+
+        let refunded = false;
+        if (booking.stripePaymentIntentId) {
+          try {
+            await createRefund(booking.stripePaymentIntentId, booking.amount);
+            refunded = true;
+          } catch (error) {
+            console.warn("[Booking] Refund failed:", error);
+          }
+        }
+
+        await updateBookingStatus(booking.id, "cancelled");
+
+        return {
+          bookingId: booking.id,
+          status: "cancelled",
+          refunded,
+          message: refunded ? "Refund requested successfully" : "Booking cancelled without a Stripe refund",
+        };
+      }),
+
+    rescheduleBooking: protectedProcedure
+      .input(
+        z.object({
+          bookingId: z.string().uuid(),
+          bookingTime: z.string().datetime(),
+        })
+      )
+      .mutation(async ({ input, ctx }) => {
+        const booking = await getBooking(input.bookingId);
+        if (!booking) {
+          throw new Error("Booking not found");
+        }
+
+        const userEmail = ctx.user.email?.trim().toLowerCase();
+        const isOwner = userEmail && booking.clientEmail.toLowerCase() === userEmail;
+        const { resolveUserRole } = await import("./_core/roles");
+        const isAdmin = resolveUserRole(ctx.user) === "admin";
+
+        if (!isOwner && !isAdmin) {
+          throw new Error("You are not allowed to reschedule this booking");
+        }
+
+        const db = await getDb();
+        if (!db) {
+          throw new Error("Database not available");
+        }
+
+        await db
+          .update(bookings)
+          .set({
+            bookingTime: new Date(input.bookingTime),
+            updatedAt: new Date(),
+          })
+          .where(eq(bookings.id, input.bookingId));
+
+        return {
+          bookingId: booking.id,
+          bookingTime: input.bookingTime,
         };
       }),
 

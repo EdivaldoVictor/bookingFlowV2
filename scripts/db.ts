@@ -12,7 +12,7 @@ const practitionersData = [
     name: "Bispo barber",
     email: "bispo@example.com",
     description: "Barber",
-    hourlyRate: 6000, // £60
+    hourlyRate: 4500, // £60
   },
 ];
 
@@ -94,6 +94,7 @@ const setupDatabase = async () => {
         "openId" varchar(64) NOT NULL UNIQUE,
         "name" text,
         "email" varchar(320),
+        "passwordHash" text,
         "loginMethod" varchar(64),
         "role" "role" DEFAULT 'user' NOT NULL,
         "createdAt" timestamp DEFAULT now() NOT NULL,
@@ -111,6 +112,55 @@ const setupDatabase = async () => {
   }
 };
 
+const seedAdminUser = async (pool: Pool) => {
+  const { hashPassword } = await import("../server/_core/password");
+  const { ENV } = await import("../server/_core/env");
+
+  const normalizedEmail = ENV.adminEmail.trim().toLowerCase();
+  const password = process.env.ADMIN_PASSWORD ?? "welcome22@@";
+  const openId = `local:${normalizedEmail}`;
+  const passwordHash = await hashPassword(password);
+
+  const existing = await pool.query(
+    `SELECT id FROM users WHERE email = $1 LIMIT 1`,
+    [normalizedEmail]
+  );
+
+  if (existing.rows.length === 0) {
+    console.log(`👤 Creating admin user ${normalizedEmail}...`);
+    await pool.query(
+      `INSERT INTO users ("openId", name, email, "passwordHash", "loginMethod", role, "lastSignedIn")
+       VALUES ($1, $2, $3, $4, 'local', 'admin', NOW())`,
+      [openId, "Admin", normalizedEmail, passwordHash]
+    );
+  } else {
+    await pool.query(
+      `UPDATE users
+       SET "openId" = $2,
+           "passwordHash" = $3,
+           "loginMethod" = 'local',
+           role = 'admin',
+           "updatedAt" = NOW()
+       WHERE email = $1`,
+      [normalizedEmail, openId, passwordHash]
+    );
+    console.log(`👤 Admin user ${normalizedEmail} password synced`);
+  }
+};
+
+const ensurePasswordHashColumn = async (pool: Pool) => {
+  const columns = await pool.query<{ column_name: string }>(
+    `SELECT column_name
+     FROM information_schema.columns
+     WHERE table_schema = 'public' AND table_name = 'users'`
+  );
+  const names = columns.rows.map((row) => row.column_name);
+  if (!names.includes("passwordHash")) {
+    console.log('📝 Adding missing column "passwordHash" to users...');
+    await pool.query(`ALTER TABLE "users" ADD COLUMN "passwordHash" text`);
+  }
+};
+
 const seedDatabase = async () => {
   console.log("🌱 Seeding database...");
 
@@ -119,6 +169,7 @@ const seedDatabase = async () => {
   });
 
   try {
+    await ensurePasswordHashColumn(pool);
     const db = drizzle(pool);
 
     // Check if practitioners already exist
@@ -195,6 +246,8 @@ const seedDatabase = async () => {
     // Show final count
     const finalCount = await db.select().from(practitioners);
     console.log(`\n📈 Total practitioners in database: ${finalCount.length}`);
+
+    await seedAdminUser(pool);
 
   } catch (error) {
     console.error("❌ Error seeding database:", error);

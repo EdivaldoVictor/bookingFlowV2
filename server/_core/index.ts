@@ -32,16 +32,15 @@ async function startServer() {
   const app = express();
   const server = createServer(app);
 
-  // Initialize database with schema setup and seed
+  // Seed practitioners (and admin) on boot — schema setup is manual via `pnpm db:reset`.
   try {
-    console.log("[Server] Initializing database...");
-    const { setupDatabase, seedDatabase } = await import("../../scripts/db.ts");
-    await setupDatabase();
+    console.log("[Server] Seeding database if needed...");
+    const { seedDatabase } = await import("../../scripts/db.ts");
     await seedDatabase();
   } catch (error) {
     console.log(
-      "[Server] Database initialization completed (may have failed, but continuing):",
-      error.message
+      "[Server] Database seed completed (may have failed, but continuing):",
+      error instanceof Error ? error.message : error
     );
   }
 

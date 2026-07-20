@@ -171,8 +171,10 @@ class SDKServer {
     return this.signSession(
       {
         openId,
-        appId: ENV.appId,
-        name: options.name || "",
+        // Local auth may run without VITE_APP_ID; keep a stable fallback so
+        // session verification does not reject valid logins.
+        appId: ENV.appId || "local-app",
+        name: options.name || openId,
       },
       options
     );
@@ -189,8 +191,8 @@ class SDKServer {
 
     return new SignJWT({
       openId: payload.openId,
-      appId: payload.appId,
-      name: payload.name,
+      appId: payload.appId || "local-app",
+      name: payload.name || payload.openId,
     })
       .setProtectedHeader({ alg: "HS256", typ: "JWT" })
       .setExpirationTime(expirationSeconds)
@@ -212,19 +214,17 @@ class SDKServer {
       });
       const { openId, appId, name } = payload as Record<string, unknown>;
 
-      if (
-        !isNonEmptyString(openId) ||
-        !isNonEmptyString(appId) ||
-        !isNonEmptyString(name)
-      ) {
+      // openId is the only required identity claim for local/session auth.
+      // appId/name may be empty in older tokens or when env vars are missing.
+      if (!isNonEmptyString(openId)) {
         console.warn("[Auth] Session payload missing required fields");
         return null;
       }
 
       return {
         openId,
-        appId,
-        name,
+        appId: isNonEmptyString(appId) ? appId : ENV.appId || "local-app",
+        name: isNonEmptyString(name) ? name : openId,
       };
     } catch (error) {
       console.warn("[Auth] Session verification failed", String(error));
@@ -257,7 +257,6 @@ class SDKServer {
   }
 
   async authenticateRequest(req: Request): Promise<User> {
-    // Regular authentication flow
     const cookies = this.parseCookies(req.headers.cookie);
     const sessionCookie = cookies.get(COOKIE_NAME);
     const session = await this.verifySession(sessionCookie);
@@ -292,10 +291,24 @@ class SDKServer {
       throw ForbiddenError("User not found");
     }
 
-    await db.upsertUser({
-      openId: user.openId,
-      lastSignedIn: signedInAt,
-    });
+    // Promote users listed in ADMIN_EMAILS / OWNER_OPEN_ID so env config
+    // is always reflected on the active session.
+    const { resolveUserRole } = await import("./roles");
+    const resolvedRole = resolveUserRole(user);
+    if (user.role !== resolvedRole) {
+      await db.upsertUser({
+        openId: user.openId,
+        email: user.email,
+        role: resolvedRole,
+        lastSignedIn: signedInAt,
+      });
+      user = { ...user, role: resolvedRole, lastSignedIn: signedInAt };
+    } else {
+      await db.upsertUser({
+        openId: user.openId,
+        lastSignedIn: signedInAt,
+      });
+    }
 
     return user;
   }

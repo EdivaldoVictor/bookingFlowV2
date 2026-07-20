@@ -1,8 +1,11 @@
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { getLoginUrl } from "@/const";
-import { Link } from "wouter";
+import { trpc } from "@/lib/trpc";
+import { Link, useLocation } from "wouter";
+import { useState } from "react";
 import {
   Calendar,
   CreditCard,
@@ -11,10 +14,20 @@ import {
   Sparkles,
   Users,
 } from "lucide-react";
-import { trpc } from "@/lib/trpc";
 
 export default function Home() {
   const { user, isAuthenticated } = useAuth();
+  const utils = trpc.useUtils();
+  const [, setLocation] = useLocation();
+  const [mode, setMode] = useState<"login" | "register" | null>(null);
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [formError, setFormError] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const registerMutation = trpc.auth.register.useMutation();
+  const loginMutation = trpc.auth.login.useMutation();
 
   const {
     data: practitioners,
@@ -45,23 +58,150 @@ export default function Home() {
             </div>
             <div className="flex items-center gap-4">
               {isAuthenticated && user ? (
-                <div className="text-sm text-muted-foreground">
-                  Olá,{" "}
-                  <span className="text-primary font-medium">{user.name}</span>
+                <div className="flex items-center gap-3">
+                  <div className="text-sm text-muted-foreground">
+                    Olá,{" "}
+                    <span className="text-primary font-medium">{user.name}</span>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="border-primary/40 text-foreground hover:bg-primary/10 hover:border-primary"
+                    onClick={() => setLocation("/dashboard")}
+                  >
+                    {user.role === "admin" ? "Dashboard" : "Meus agendamentos"}
+                  </Button>
                 </div>
               ) : (
-                <Button
-                  asChild
-                  variant="outline"
-                  className="border-primary/40 text-foreground hover:bg-primary/10 hover:border-primary"
-                >
-                  <a href={getLoginUrl()}>Entrar</a>
-                </Button>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    className="border-primary/40 text-foreground hover:bg-primary/10 hover:border-primary"
+                    onClick={() => {
+                      setMode("login");
+                      setFormError("");
+                    }}
+                  >
+                    Entrar
+                  </Button>
+                  <Button
+                    className="bg-primary text-primary-foreground"
+                    onClick={() => {
+                      setMode("register");
+                      setFormError("");
+                    }}
+                  >
+                    Registrar-se
+                  </Button>
+                </div>
               )}
             </div>
           </div>
         </div>
       </header>
+
+      {!isAuthenticated && mode && (
+        <section className="container py-6">
+          <Card className="card-barber p-6 max-w-xl">
+            <div className="flex items-center gap-2 mb-4">
+              <Scissors className="h-4 w-4 text-primary" />
+              <h3 className="font-semibold text-foreground">{mode === "login" ? "Login local" : "Cadastro local"}</h3>
+            </div>
+
+            <div className="flex gap-2 mb-4">
+              <Button variant={mode === "login" ? "default" : "outline"} size="sm" onClick={() => { setMode("login"); setFormError(""); }}>Entrar</Button>
+              <Button variant={mode === "register" ? "default" : "outline"} size="sm" onClick={() => { setMode("register"); setFormError(""); }}>Registrar</Button>
+            </div>
+
+            <form
+              className="space-y-3"
+              onSubmit={async event => {
+                event.preventDefault();
+                setFormError("");
+                setIsSubmitting(true);
+                try {
+                  let result;
+                  if (mode === "register") {
+                    result = await registerMutation.mutateAsync({
+                      name,
+                      email,
+                      password,
+                    });
+                  } else {
+                    result = await loginMutation.mutateAsync({ email, password });
+                  }
+
+                  if (result?.success) {
+                    setName("");
+                    setEmail("");
+                    setPassword("");
+                    setMode(null);
+
+                    if (result.user) {
+                      utils.auth.me.setData(undefined, result.user);
+                      const nextPath = result.user.role === "admin" ? "/dashboard/admin" : "/dashboard";
+                      setLocation(nextPath);
+                    } else {
+                      const redirectWithRetry = async (attempt = 1) => {
+                        try {
+                          const me = await utils.auth.me.fetch();
+                          if (me) {
+                            const userPath = me.role === "admin" ? "/dashboard/admin" : "/dashboard";
+                            setLocation(userPath);
+                          } else if (attempt < 3) {
+                            setTimeout(() => redirectWithRetry(attempt + 1), 400);
+                          } else {
+                            window.location.href = "/dashboard";
+                          }
+                        } catch (error) {
+                          console.error("[Auth] Failed to fetch session after login:", error);
+                          if (attempt < 3) {
+                            setTimeout(() => redirectWithRetry(attempt + 1), 400);
+                          } else {
+                            window.location.href = "/dashboard";
+                          }
+                        }
+                      };
+
+                      void redirectWithRetry();
+                    }
+                  } else {
+                    setFormError("Não foi possível concluir o acesso.");
+                  }
+                } catch (error: any) {
+                  setFormError(error?.message || "Não foi possível concluir a operação");
+                } finally {
+                  setIsSubmitting(false);
+                }
+              }}
+            >
+              {mode === "register" && (
+                <Input
+                  placeholder="Seu nome"
+                  value={name}
+                  onChange={event => setName(event.target.value)}
+                />
+              )}
+              <Input
+                type="email"
+                placeholder="Seu e-mail"
+                value={email}
+                onChange={event => setEmail(event.target.value)}
+              />
+              <Input
+                type="password"
+                placeholder="Sua senha"
+                value={password}
+                onChange={event => setPassword(event.target.value)}
+              />
+              {formError ? <p className="text-sm text-red-500">{formError}</p> : null}
+              <Button type="submit" className="w-full" disabled={isSubmitting}>
+                {isSubmitting ? "Processando..." : mode === "login" ? "Entrar" : "Criar conta"}
+              </Button>
+            </form>
+          </Card>
+        </section>
+      )}
 
       {/* Hero Section */}
       <section className="container py-16 md:py-20">
