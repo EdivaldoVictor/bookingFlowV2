@@ -12,7 +12,7 @@ const practitionersData = [
     name: "Bispo barber",
     email: "bispo@example.com",
     description: "Barber",
-    hourlyRate: 4500, // £60
+    hourlyRate: 4500, // R$ 45.00
   },
 ];
 
@@ -24,18 +24,8 @@ const setupDatabase = async () => {
   });
 
   try {
-    // Drop existing tables if they exist
-    console.log("📝 Dropping existing tables...");
-    await pool.query(`
-      DROP TABLE IF EXISTS bookings CASCADE;
-      DROP TABLE IF EXISTS practitioners CASCADE;
-      DROP TABLE IF EXISTS users CASCADE;
-      DROP TYPE IF EXISTS role CASCADE;
-      DROP TYPE IF EXISTS status CASCADE;
-    `);
+    console.log("🏗️ Creating schema (if not exists)...");
 
-    console.log("🏗️ Creating schema...");
-    
     // Enable UUID extension
     try {
       await pool.query(`CREATE EXTENSION IF NOT EXISTS "pgcrypto"`);
@@ -50,13 +40,22 @@ const setupDatabase = async () => {
       }
     }
     
-    // Create enums
-    await pool.query(`CREATE TYPE "role" AS ENUM('user', 'admin')`);
-    await pool.query(`CREATE TYPE "status" AS ENUM('pending', 'confirmed', 'cancelled')`);
+    // Create enums if they don't exist
+    const roleExists = await pool.query(`SELECT 1 FROM pg_type WHERE typname = 'role'`);
+    if (roleExists.rows.length === 0) {
+      await pool.query(`CREATE TYPE "role" AS ENUM('user', 'admin')`);
+      console.log("   ✅ role enum created");
+    }
+    
+    const statusExists = await pool.query(`SELECT 1 FROM pg_type WHERE typname = 'status'`);
+    if (statusExists.rows.length === 0) {
+      await pool.query(`CREATE TYPE "status" AS ENUM('pending', 'confirmed', 'cancelled')`);
+      console.log("   ✅ status enum created");
+    }
 
     // Create tables with UUIDs
     await pool.query(`
-      CREATE TABLE "practitioners" (
+      CREATE TABLE IF NOT EXISTS "practitioners" (
         "id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
         "name" varchar(255) NOT NULL,
         "email" varchar(320) NOT NULL,
@@ -68,7 +67,7 @@ const setupDatabase = async () => {
     `);
 
     await pool.query(`
-      CREATE TABLE "bookings" (
+      CREATE TABLE IF NOT EXISTS "bookings" (
         "id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
         "practitionerId" uuid NOT NULL,
         "clientName" varchar(255) NOT NULL,
@@ -89,7 +88,7 @@ const setupDatabase = async () => {
     `);
 
     await pool.query(`
-      CREATE TABLE "users" (
+      CREATE TABLE IF NOT EXISTS "users" (
         "id" integer PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
         "openId" varchar(64) NOT NULL UNIQUE,
         "name" text,
