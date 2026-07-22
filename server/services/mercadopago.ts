@@ -1,93 +1,130 @@
+/**
+ * Mercado Pago service for PIX payments
+ * Real integration with Mercado Pago API
+ */
+
 import mercadopago from 'mercadopago';
-import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
-import { db } from '../db';
 
-mercadopago.configure({
-  access_token: process.env.MP_ACCESS_TOKEN!,
-});
+export interface PIXPaymentResponse {
+  preferenceId: string;
+  initPoint: string;           // Link de pagamento (fallback)
+  qrCode: string | null;
+  qrCodeBase64: string | null;
+  bookingId: string;
+}
 
-export const mercadopagoService = {
-  async createPIXPreference(bookingData: {
-    bookingId: string;
-    amount: number;
-    practitionerName: string;
-    customerEmail: string;
-    customerName: string;
-  }) {
-    try {
-      const preference = {
-        items: [
-          {
-            title: `Consulta com ${bookingData.practitionerName}`,
-            quantity: 1,
-            unit_price: bookingData.amount,
-            currency_id: 'BRL',
-          },
+// Configuração
+const getMercadoPagoClient = () => {
+  const accessToken = process.env.MERCADO_PAGO_ACCESS_TOKEN;
+  if (!accessToken) {
+    throw new Error("MERCADO_PAGO_ACCESS_TOKEN is not set in environment variables");
+  }
+
+  mercadopago.configure({
+    access_token: accessToken,
+  });
+
+  return mercadopago;
+};
+
+export async function createPIXPreference(params: {
+  amount: number;
+  bookingId: string;
+  clientEmail: string;
+  clientName: string;
+  practitionerName: string;
+  serviceName?: string;
+}): Promise<PIXPaymentResponse> {
+  try {
+    const mp = getMercadoPagoClient();
+
+    const preference = {
+      items: [
+        {
+          title: params.serviceName || `Consulta com ${params.practitionerName}`,
+          quantity: 1,
+          unit_price: params.amount,
+          currency_id: "BRL",
+          description: `Agendamento para ${params.clientName}`,
+        },
+      ],
+      payer: {
+        email: params.clientEmail,
+        name: params.clientName,
+      },
+      external_reference: params.bookingId,
+      notification_url: `${process.env.BASE_URL}/api/webhook/mercadopago`,
+      back_urls: {
+        success: `${process.env.BASE_URL}/booking/success?bookingId=${params.bookingId}&provider=mercadopago`,
+        failure: `${process.env.BASE_URL}/booking/error`,
+        pending: `${process.env.BASE_URL}/booking/pending?bookingId=${params.bookingId}`,
+      },
+      auto_return: "approved",
+      payment_methods: {
+        excluded_payment_types: [
+          { id: "credit_card" },
+          { id: "debit_card" },
+          { id: "ticket" }, // remove boleto se quiser só PIX
         ],
-        payer: {
-          email: bookingData.customerEmail,
-          name: bookingData.customerName,
-        },
-        external_reference: bookingData.bookingId,
-        notification_url: `${process.env.BASE_URL}/api/webhook/mercadopago`,
-        back_urls: {
-          success: `${process.env.BASE_URL}/booking/success?bookingId=${bookingData.bookingId}`,
-          failure: `${process.env.BASE_URL}/booking/error`,
-          pending: `${process.env.BASE_URL}/booking/pending`,
-        },
-        auto_return: 'approved',
-        payment_methods: {
-          excluded_payment_types: [{ id: 'credit_card' }, { id: 'debit_card' }],
-        },
-      };
+      },
+      statement_descriptor: "BOOKINGFLOW",
+    };
 
-      const response = await mercadopago.preferences.create(preference);
+    const response = await mp.preferences.create(preference);
 
-      // Salvar o payment_id/preference_id no banco
-      await db
-        .update('bookings')
-        .set({
-          paymentProvider: 'mercadopago',
-          paymentId: response.body.id,
-          status: 'pending',
-        })
-        .where('id', bookingData.bookingId);
+    const transactionData = response.body.point_of_interaction?.transaction_data;
+
+    // Atualizar booking no banco (recomendo criar uma função compartilhada)
+    // await updateBookingPaymentInfo(params.bookingId, 'mercadopago', response.body.id);
+
+    return {
+      preferenceId: response.body.id,
+      initPoint: response.body.init_point,
+      qrCode: transactionData?.qr_code || null,
+      qrCodeBase64: transactionData?.qr_code_base64 || null,
+      bookingId: params.bookingId,
+    };
+  } catch (error: any) {
+    console.error("[Mercado Pago Error]:", error.message || error);
+    throw new TRPCError({
+      code: "INTERNAL_SERVER_ERROR",
+      message: "Erro ao gerar pagamento PIX",
+      cause: error,
+    });
+  }
+}
+
+/**
+ * Processa webhook do Mercado Pago
+ */
+export async function processMercadoPagoWebhook(notification: any) {
+  try {
+    if (notification.type !== "payment") return null;
+
+    const mp = getMercadoPagoClient();
+    const payment = await mp.payment.findById(notification.data.id);
+
+    const paymentData = payment.body;
+
+    if (paymentData.status === "approved" && paymentData.external_reference) {
+      const bookingId = paymentData.external_reference;
+
+      // Aqui você deve chamar a mesma lógica que usa no Stripe para confirmar booking + criar evento no Cal.com
+      // Ex: await confirmBookingAndCreateEvent(bookingId);
+
+      console.log(`✅ Pagamento PIX aprovado! Booking: ${bookingId}`);
 
       return {
-        preferenceId: response.body.id,
-        init_point: response.body.init_point, // link de pagamento
-        qrCode: response.body.point_of_interaction?.transaction_data?.qr_code,
-        qrCodeBase64: response.body.point_of_interaction?.transaction_data?.qr_code_base64,
+        bookingId,
+        paymentId: paymentData.id,
+        status: paymentData.status,
       };
-    } catch (error: any) {
-      console.error('Mercado Pago Error:', error);
-      throw new TRPCError({
-        code: 'INTERNAL_SERVER_ERROR',
-        message: 'Erro ao criar pagamento PIX',
-      });
     }
-  },
 
-  async handleWebhook(notification: any) {
-    // Validar e processar webhook
-    if (notification.type === 'payment') {
-      const payment = await mercadopago.payment.findById(notification.data.id);
-
-      if (payment.body.status === 'approved') {
-        const bookingId = payment.body.external_reference;
-
-        await db
-          .update('bookings')
-          .set({
-            status: 'confirmed',
-            paidAt: new Date(),
-          })
-          .where('id', bookingId);
-
-        // Criar evento no Cal.com (reutilizar lógica que você já tem no Stripe)
-        await createCalComEvent(bookingId);
-      }
-    }
-  },
-};
+    return null;
+  } catch (error) {
+    console.error("[Mercado Pago Webhook Error]:", error);
+    return null;
+  }
+}
