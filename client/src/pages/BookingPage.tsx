@@ -269,9 +269,9 @@ const createPixBookingMutation = trpc.bookings.createPixBooking.useMutation({
          clientEmail: formData.clientEmail,
          clientPhone: formData.clientPhone,
          bookingTime: selectedSlotData.startTime.toISOString(),
-         amount: selectedService.price,           // ← importante
+         servicePrice: selectedService.price,
          serviceName: selectedService.name,
-  });
+   });
       } else {
         await createStripeBookingMutation.mutateAsync({
           practitionerId,

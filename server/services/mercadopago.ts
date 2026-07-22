@@ -31,6 +31,13 @@ export async function createPixPayment(params: {
   practitionerName: string;
   serviceName?: string;
 }): Promise<PixResponse> {
+  if (!Number.isFinite(params.amount) || params.amount <= 0) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: `Invalid payment amount: ${params.amount}`,
+    });
+  }
+
   try {
     const paymentData = {
       transaction_amount: params.amount,

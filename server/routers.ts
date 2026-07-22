@@ -213,7 +213,8 @@ export const appRouter = router({
           clientEmail: z.string().email(),
           clientPhone: z.string().min(1),
           bookingTime: z.string().datetime(),
-          servicePrice: z.number().optional(),
+          servicePrice: z.number().nonNegative().optional(),
+          serviceName: z.string().optional(),
         })
       )
       .mutation(async ({ input }) => {
@@ -229,7 +230,8 @@ export const appRouter = router({
           throw new Error("This time slot is already booked. Please select another time.");
         }
 
-        const selectedServicePrice = input.servicePrice ?? 25;
+        const selectedServicePrice = Number(input.servicePrice ?? 25);
+        const selectedServiceName = input.serviceName ?? "Cabelo";
 
         // 1. Criar o agendamento no banco de dados com status 'pending_pix'
         const bookingData = {
@@ -239,7 +241,7 @@ export const appRouter = router({
           clientPhone: input.clientPhone,
           bookingTime: bookingTime,
           status: "pending" as const, // Salvamos como pending, será atualizado pelo webhook do MP
-          amount: selectedServicePrice * 100, // Salva no banco em centavos
+          amount: Math.round(selectedServicePrice * 100), // Salva no banco em centavos
           stripeSessionId: null,
           stripePaymentIntentId: null,
         };
@@ -254,6 +256,7 @@ export const appRouter = router({
           clientName: input.clientName,
           bookingId: String(booking.id),
           practitionerName: practitioner.name,
+          serviceName: selectedServiceName,
         });
 
         // 3. Retornar os dados do QR Code para o frontend
