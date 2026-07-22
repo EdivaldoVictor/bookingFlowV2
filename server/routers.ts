@@ -2,6 +2,7 @@ import { COOKIE_NAME } from "@shared/const";
 import { eq } from "drizzle-orm";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
+import { createPixPayment } from "./services/mercadopago";
 import { adminProcedure, protectedProcedure, publicProcedure, router } from "./_core/trpc";
 import { z } from "zod";
 import {
@@ -19,7 +20,6 @@ import { createCalComBooking, cancelCalComBooking } from "./services/availabilit
 import { getAvailabilityForPractitioner } from "./services/availability";
 import { createCheckoutSession, createRefund } from "./services/stripe";
 
-
 export const appRouter = router({
   // if you need to use socket.io, read and register route in server/_core/index.ts, all api should start with '/api/' so that the gateway can route correctly
   system: systemRouter,
@@ -32,25 +32,21 @@ export const appRouter = router({
       const db = await getDb();
       if (!db) {
         console.error(`[Router] Database not available`);
-
         throw new Error("Database not available");
       }
 
       try {
-        const result = await db
-          .select()
-          .from(practitioners);
-
+        const result = await db.select().from(practitioners);
         console.log(`[Router] Found ${result.length} practitioners in database`);
         return result;
-      } catch (error) {    
+      } catch (error) {
         throw new Error("Error fetching practitioners");
       }
     }),
   }),
 
   auth: router({
-    me: publicProcedure.query(opts => {
+    me: publicProcedure.query((opts) => {
       if (!opts.ctx.user) return null;
       const { toPublicUser } = require("./_core/publicUser") as typeof import("./_core/publicUser");
       return toPublicUser(opts.ctx.user);
@@ -91,10 +87,16 @@ export const appRouter = router({
         });
 
         const cookieOptions = getSessionCookieOptions(ctx.req);
-        ctx.res.cookie(COOKIE_NAME, await import("./_core/sdk").then(m => m.sdk.createSessionToken(openId, { name: input.name, expiresInMs: 31536000000 })), {
-          ...cookieOptions,
-          maxAge: 31536000000,
-        });
+        ctx.res.cookie(
+          COOKIE_NAME,
+          await import("./_core/sdk").then((m) =>
+            m.sdk.createSessionToken(openId, { name: input.name, expiresInMs: 31536000000 })
+          ),
+          {
+            ...cookieOptions,
+            maxAge: 31536000000,
+          }
+        );
 
         return { success: true, user: { openId, name: input.name, email: normalizedEmail, role } };
       }),
@@ -136,10 +138,19 @@ export const appRouter = router({
         }
 
         const cookieOptions = getSessionCookieOptions(ctx.req);
-        ctx.res.cookie(COOKIE_NAME, await import("./_core/sdk").then(m => m.sdk.createSessionToken(userRecord.openId, { name: userRecord.name || "", expiresInMs: 31536000000 })), {
-          ...cookieOptions,
-          maxAge: 31536000000,
-        });
+        ctx.res.cookie(
+          COOKIE_NAME,
+          await import("./_core/sdk").then((m) =>
+            m.sdk.createSessionToken(userRecord.openId, {
+              name: userRecord.name || "",
+              expiresInMs: 31536000000,
+            })
+          ),
+          {
+            ...cookieOptions,
+            maxAge: 31536000000,
+          }
+        );
 
         return {
           success: true,
@@ -169,9 +180,7 @@ export const appRouter = router({
     getAvailability: publicProcedure
       .input(z.object({ practitionerId: z.string().uuid() }))
       .query(async ({ input }) => {
-        console.log(
-          `[Router] getAvailability called with practitionerId: ${input.practitionerId}`
-        );
+        console.log(`[Router] getAvailability called with practitionerId: ${input.practitionerId}`);
 
         const practitioner = await getPractitioner(input.practitionerId);
         console.log(`[Router] Practitioner found:`, practitioner);
@@ -181,21 +190,75 @@ export const appRouter = router({
         }
 
         console.log(`[Router] Calling getAvailabilityForPractitioner...`);
-        const slots = await getAvailabilityForPractitioner(
-          practitioner.id
-        );
-        console.log(
-          `[Router] Got ${slots.length} slots from availability service`
-        );
+        const slots = await getAvailabilityForPractitioner(practitioner.id);
+        console.log(`[Router] Got ${slots.length} slots from availability service`);
 
-        const availableSlots = slots.filter(s => s.available);
-        console.log(
-          `[Router] Filtered to ${availableSlots.length} available slots`
-        );
+        const availableSlots = slots.filter((s) => s.available);
+        console.log(`[Router] Filtered to ${availableSlots.length} available slots`);
 
         return {
           practitioner,
           slots: availableSlots,
+        };
+      }),
+
+    /**
+     * Create a new booking with Pix payment
+     */
+    createPixBooking: publicProcedure
+      .input(
+        z.object({
+          practitionerId: z.string().uuid(),
+          clientName: z.string().min(1),
+          clientEmail: z.string().email(),
+          clientPhone: z.string().min(1),
+          bookingTime: z.string().datetime(),
+          servicePrice: z.number().optional(),
+        })
+      )
+      .mutation(async ({ input }) => {
+        console.log(`[PixBooking] Starting Pix booking creation for practitioner ${input.practitionerId}`);
+        
+        const practitioner = await getPractitioner(input.practitionerId);
+        if (!practitioner) throw new Error("Practitioner not found");
+
+        const bookingTime = new Date(input.bookingTime);
+        const existingBooking = await checkBookingConflict(practitioner.id, bookingTime);
+        
+        if (existingBooking) {
+          throw new Error("This time slot is already booked. Please select another time.");
+        }
+
+        const selectedServicePrice = input.servicePrice ?? 25;
+
+        // 1. Criar o agendamento no banco de dados com status 'pending_pix'
+        const bookingData = {
+          practitionerId: practitioner.id,
+          clientName: input.clientName,
+          clientEmail: input.clientEmail,
+          clientPhone: input.clientPhone,
+          bookingTime: bookingTime,
+          status: "pending" as const, // Salvamos como pending, será atualizado pelo webhook do MP
+          amount: selectedServicePrice * 100, // Salva no banco em centavos
+          stripeSessionId: null,
+          stripePaymentIntentId: null,
+        };
+
+        const booking = await createBooking(bookingData);
+        if (!booking || !booking.id) throw new Error("Failed to create booking");
+
+        // 2. Chamar o serviço do Mercado Pago (passa o valor normal, não em centavos)
+        const pixData = await createPixPayment({
+          amount: selectedServicePrice, 
+          email: input.clientEmail,
+          name: input.clientName,
+          bookingId: String(booking.id),
+        });
+
+        // 3. Retornar os dados do QR Code para o frontend
+        return {
+          bookingId: booking.id,
+          ...pixData,
         };
       }),
 
@@ -219,7 +282,7 @@ export const appRouter = router({
       .mutation(async ({ input }) => {
         try {
           console.log(`[Booking] Starting booking creation for practitioner ${input.practitionerId}`);
-          
+
           const practitioner = await getPractitioner(input.practitionerId);
           if (!practitioner) {
             console.error(`[Booking] Practitioner ${input.practitionerId} not found`);
@@ -231,16 +294,11 @@ export const appRouter = router({
           // Check for booking conflicts at the same time slot
           const bookingTime = new Date(input.bookingTime);
           console.log(`[Booking] Checking for conflicts at ${bookingTime.toISOString()}`);
-          
-          const existingBooking = await checkBookingConflict(
-            practitioner.id,
-            bookingTime
-          );
+
+          const existingBooking = await checkBookingConflict(practitioner.id, bookingTime);
           if (existingBooking) {
             console.warn(`[Booking] Conflict detected: booking ${existingBooking.id} already exists`);
-            throw new Error(
-              "This time slot is already booked. Please select another time."
-            );
+            throw new Error("This time slot is already booked. Please select another time.");
           }
 
           const selectedServicePrice = input.servicePrice ?? 25;
@@ -259,12 +317,12 @@ export const appRouter = router({
             stripeSessionId: null,
             stripePaymentIntentId: null,
           };
-          
+
           console.log(`[Booking] Booking data prepared:`, {
             ...bookingData,
             bookingTime: bookingData.bookingTime.toISOString(),
           });
-          
+
           const booking = await createBooking(bookingData);
 
           if (!booking || !booking.id) {
@@ -317,9 +375,7 @@ export const appRouter = router({
         })
       )
       .mutation(async ({ input }) => {
-        const booking = await getBookingByStripeSessionId(
-          input.stripeSessionId
-        );
+        const booking = await getBookingByStripeSessionId(input.stripeSessionId);
         if (!booking) {
           throw new Error("Booking not found");
         }
@@ -369,10 +425,7 @@ export const appRouter = router({
       const email = ctx.user.email?.trim().toLowerCase();
       if (!email) return [];
 
-      const rows = await db
-        .select()
-        .from(bookings)
-        .where(eq(bookings.clientEmail, email));
+      const rows = await db.select().from(bookings).where(eq(bookings.clientEmail, email));
 
       return rows.sort((a, b) => {
         const aTime = new Date(a.bookingTime).getTime();

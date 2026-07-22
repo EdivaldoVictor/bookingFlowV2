@@ -10,6 +10,10 @@ import {
   Clock,
   Scissors,
   ArrowLeft,
+  Copy,
+  Check,
+  QrCode,
+  CreditCard
 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
@@ -51,6 +55,17 @@ export default function BookingPage({ practitionerId }: BookingPageProps) {
   const [selectedServiceId, setSelectedServiceId] = useState(BOOKING_SERVICES[0].id);
   const [selectedDateKey, setSelectedDateKey] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  
+  // Estado para escolher o método de pagamento
+  const [paymentMethod, setPaymentMethod] = useState<"pix" | "stripe">("pix");
+
+  // Estados para o pagamento Pix
+  const [pixData, setPixData] = useState<{
+    qrCode: string;
+    qrCodeBase64: string;
+    bookingId: string | number;
+  } | null>(null);
+  const [copied, setCopied] = useState(false);
 
   const isValidUUID = UUID_REGEX.test(practitionerId);
   const isNumericId = /^\d+$/.test(practitionerId);
@@ -166,9 +181,36 @@ export default function BookingPage({ practitionerId }: BookingPageProps) {
     setSelectedSlot(null);
   };
 
-  const createBookingMutation = trpc.bookings.createBooking.useMutation({
+  const handleCopyPix = () => {
+    if (pixData?.qrCode) {
+      navigator.clipboard.writeText(pixData.qrCode);
+      setCopied(true);
+      toast.success("Código Pix copiado!");
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
+
+  // Mutação Mercado Pago (Pix)
+  const createPixBookingMutation = trpc.bookings.createPixBooking.useMutation({
     onSuccess: data => {
-      console.log("[Booking] Booking created successfully:", data);
+      console.log("[Booking] Pix Booking created successfully:", data);
+      toast.success("Agendamento reservado! Realize o pagamento.");
+      setPixData(data as any);
+      setIsSubmitting(false);
+    },
+    onError: error => {
+      console.error("[Booking] Error creating Pix booking:", error);
+      toast.error(
+        error.message || "Falha ao gerar Pix. Tente novamente."
+      );
+      setIsSubmitting(false);
+    },
+  });
+
+  // Mutação Stripe (Cartão)
+  const createStripeBookingMutation = trpc.bookings.createBooking.useMutation({
+    onSuccess: data => {
+      console.log("[Booking] Stripe Booking created successfully:", data);
       toast.success("Redirecionando para o pagamento...");
 
       if (data.checkoutUrl) {
@@ -179,9 +221,9 @@ export default function BookingPage({ practitionerId }: BookingPageProps) {
       }
     },
     onError: error => {
-      console.error("[Booking] Error creating booking:", error);
+      console.error("[Booking] Error creating Stripe booking:", error);
       toast.error(
-        error.message || "Falha ao criar agendamento. Tente novamente."
+        error.message || "Falha ao criar agendamento via cartão. Tente novamente."
       );
       setIsSubmitting(false);
     },
@@ -216,17 +258,28 @@ export default function BookingPage({ practitionerId }: BookingPageProps) {
         return;
       }
 
-      await createBookingMutation.mutateAsync({
-        practitionerId,
-        clientName: formData.clientName,
-        clientEmail: formData.clientEmail,
-        clientPhone: formData.clientPhone,
-        bookingTime: selectedSlotData.startTime.toISOString(),
-        serviceId: selectedService.id,
-        serviceName: selectedService.name,
-        servicePrice: selectedService.price,
-        serviceDurationMinutes: selectedService.durationMinutes,
-      });
+      if (paymentMethod === "pix") {
+        await createPixBookingMutation.mutateAsync({
+          practitionerId,
+          clientName: formData.clientName,
+          clientEmail: formData.clientEmail,
+          clientPhone: formData.clientPhone,
+          bookingTime: selectedSlotData.startTime.toISOString(),
+          servicePrice: selectedService.price,
+        });
+      } else {
+        await createStripeBookingMutation.mutateAsync({
+          practitionerId,
+          clientName: formData.clientName,
+          clientEmail: formData.clientEmail,
+          clientPhone: formData.clientPhone,
+          bookingTime: selectedSlotData.startTime.toISOString(),
+          serviceId: selectedService.id,
+          serviceName: selectedService.name,
+          servicePrice: selectedService.price,
+          serviceDurationMinutes: selectedService.durationMinutes,
+        });
+      }
     } catch (error) {
       console.error("[Booking] Booking error:", error);
     }
@@ -312,6 +365,65 @@ export default function BookingPage({ practitionerId }: BookingPageProps) {
     );
   }
 
+  // TELA DE SUCESSO (PAGAMENTO PIX)
+  if (pixData) {
+    return (
+      <div className="min-h-screen hero-barber py-8 px-4 flex items-center justify-center">
+        <div className="max-w-md w-full mx-auto">
+          <Card className="card-barber p-8 text-center border-primary/50 shadow-orange-glow">
+            <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-2xl bg-orange-gradient">
+              <QrCode className="h-8 w-8 text-black" strokeWidth={2} />
+            </div>
+            
+            <h1 className="text-2xl font-bold text-foreground mb-2">
+              Quase lá!
+            </h1>
+            <p className="text-muted-foreground mb-6 text-sm">
+              Escaneie o QR Code abaixo no app do seu banco para confirmar seu agendamento. O pagamento é identificado automaticamente.
+            </p>
+
+            <div className="bg-white p-4 rounded-xl inline-block mb-6 shadow-lg">
+              <img
+                src={`data:image/jpeg;base64,${pixData.qrCodeBase64}`}
+                alt="QR Code Pix"
+                className="w-48 h-48 md:w-56 md:h-56 object-contain"
+              />
+            </div>
+
+            <div className="text-left mb-6">
+              <Label className="text-xs text-muted-foreground mb-1 block">
+                Pix Copia e Cola
+              </Label>
+              <div className="flex gap-2">
+                <Input
+                  readOnly
+                  value={pixData.qrCode}
+                  className="bg-black/30 border-border/60 font-mono text-xs text-muted-foreground truncate"
+                />
+                <Button 
+                  onClick={handleCopyPix} 
+                  className="btn-barber border-0 shrink-0 px-3"
+                  title="Copiar código"
+                >
+                  {copied ? <Check className="w-4 h-4 text-black" /> : <Copy className="w-4 h-4 text-black" />}
+                </Button>
+              </div>
+            </div>
+
+            <Button
+              onClick={() => navigate("/")}
+              variant="outline"
+              className="w-full border-border/60 hover:bg-white/5 text-foreground"
+            >
+              Voltar ao Início
+            </Button>
+          </Card>
+        </div>
+      </div>
+    );
+  }
+
+  // TELA DE AGENDAMENTO (ESCOLHER HORÁRIO E SERVIÇO)
   return (
     <div className="min-h-screen hero-barber py-8 px-4">
       <div className="max-w-2xl mx-auto">
@@ -490,51 +602,84 @@ export default function BookingPage({ practitionerId }: BookingPageProps) {
 
         {/* Booking Form */}
         <Card className="card-barber p-6">
-          <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
+          <h2 className="text-xl font-semibold mb-6 flex items-center gap-2">
             <Scissors className="w-5 h-5 text-primary" />
-            Seus dados
+            Seus dados e Pagamento
           </h2>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <Label htmlFor="clientName">Nome completo</Label>
-              <Input
-                id="clientName"
-                name="clientName"
-                type="text"
-                placeholder="João Silva"
-                value={formData.clientName}
-                onChange={handleFormChange}
-                required
-                className="bg-black/30 border-border/60 focus-visible:ring-primary"
-              />
+          <form onSubmit={handleSubmit} className="space-y-6">
+            <div className="space-y-4">
+              <div>
+                <Label htmlFor="clientName">Nome completo</Label>
+                <Input
+                  id="clientName"
+                  name="clientName"
+                  type="text"
+                  placeholder="João Silva"
+                  value={formData.clientName}
+                  onChange={handleFormChange}
+                  required
+                  className="bg-black/30 border-border/60 focus-visible:ring-primary"
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="clientEmail">E-mail</Label>
+                <Input
+                  id="clientEmail"
+                  name="clientEmail"
+                  type="email"
+                  placeholder="joao@email.com"
+                  value={formData.clientEmail}
+                  onChange={handleFormChange}
+                  required
+                  className="bg-black/30 border-border/60 focus-visible:ring-primary"
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="clientPhone">Telefone</Label>
+                <Input
+                  id="clientPhone"
+                  name="clientPhone"
+                  type="tel"
+                  placeholder="+55 (81) 90000-0000"
+                  value={formData.clientPhone}
+                  onChange={handleFormChange}
+                  required
+                  className="bg-black/30 border-border/60 focus-visible:ring-primary"
+                />
+              </div>
             </div>
 
-            <div>
-              <Label htmlFor="clientEmail">E-mail</Label>
-              <Input
-                id="clientEmail"
-                name="clientEmail"
-                type="email"
-                placeholder="joao@email.com"
-                value={formData.clientEmail}
-                onChange={handleFormChange}
-                required
-                className="bg-black/30 border-border/60 focus-visible:ring-primary"
-              />
-            </div>
-
-            <div>
-              <Label htmlFor="clientPhone">Telefone</Label>
-              <Input
-                id="clientPhone"
-                name="clientPhone"
-                type="tel"
-                placeholder="+55 (81) 90000-0000"
-                value={formData.clientPhone}
-                onChange={handleFormChange}
-                required
-                className="bg-black/30 border-border/60 focus-visible:ring-primary"
-              />
+            {/* SELEÇÃO DO MÉTODO DE PAGAMENTO */}
+            <div className="pt-2 border-t border-border/40">
+              <Label className="mb-3 block text-base">Método de Pagamento</Label>
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => setPaymentMethod("pix")}
+                  className={`p-4 rounded-xl border-2 flex flex-col items-center justify-center gap-2 transition-all ${
+                    paymentMethod === "pix"
+                      ? "border-primary bg-primary/10 shadow-[0_0_15px_rgba(255,165,0,0.2)] text-primary"
+                      : "border-border/60 bg-black/20 text-muted-foreground hover:border-primary/50"
+                  }`}
+                >
+                  <QrCode className="w-6 h-6" />
+                  <span className="font-semibold text-sm">Pix</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPaymentMethod("stripe")}
+                  className={`p-4 rounded-xl border-2 flex flex-col items-center justify-center gap-2 transition-all ${
+                    paymentMethod === "stripe"
+                      ? "border-primary bg-primary/10 shadow-[0_0_15px_rgba(255,165,0,0.2)] text-primary"
+                      : "border-border/60 bg-black/20 text-muted-foreground hover:border-primary/50"
+                  }`}
+                >
+                  <CreditCard className="w-6 h-6" />
+                  <span className="font-semibold text-sm">Cartão</span>
+                </button>
+              </div>
             </div>
 
             <Button
@@ -542,29 +687,34 @@ export default function BookingPage({ practitionerId }: BookingPageProps) {
               disabled={
                 !selectedSlot ||
                 isSubmitting ||
-                createBookingMutation.isPending
+                createPixBookingMutation.isPending ||
+                createStripeBookingMutation.isPending
               }
-              className="w-full btn-barber border-0"
+              className="w-full btn-barber border-0 mt-4"
               size="lg"
             >
-              {isSubmitting || createBookingMutation.isPending ? (
+              {isSubmitting || createPixBookingMutation.isPending || createStripeBookingMutation.isPending ? (
                 <>
-                  <Loader2 className="mr-2 w-4 h-4 animate-spin" />
-                  {createBookingMutation.isPending
-                    ? "Criando agendamento..."
-                    : "Processando..."}
+                  <Loader2 className="mr-2 w-4 h-4 animate-spin text-black" />
+                  <span className="text-black font-semibold">Processando...</span>
                 </>
               ) : (
                 <>
-                  <Scissors className="w-4 h-4" />
-                  Agendar — {formatBRL(selectedService.price)}
+                  {paymentMethod === "pix" ? (
+                    <QrCode className="w-4 h-4 text-black mr-2" />
+                  ) : (
+                    <CreditCard className="w-4 h-4 text-black mr-2" />
+                  )}
+                  <span className="text-black font-semibold">
+                    Pagar com {paymentMethod === "pix" ? "Pix" : "Cartão"} — {formatBRL(selectedService.price)}
+                  </span>
                 </>
               )}
             </Button>
 
-            {createBookingMutation.isError && (
-              <p className="text-sm text-destructive mt-2">
-                {createBookingMutation.error?.message || "Ocorreu um erro"}
+            {(createPixBookingMutation.isError || createStripeBookingMutation.isError) && (
+              <p className="text-sm text-destructive mt-2 text-center font-medium">
+                {createPixBookingMutation.error?.message || createStripeBookingMutation.error?.message || "Ocorreu um erro"}
               </p>
             )}
           </form>
