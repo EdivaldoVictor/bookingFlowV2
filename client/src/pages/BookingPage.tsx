@@ -60,11 +60,11 @@ export default function BookingPage({ practitionerId }: BookingPageProps) {
   const [paymentMethod, setPaymentMethod] = useState<"pix" | "stripe">("pix");
 
   // Estados para o pagamento Pix
-  const [pixData, setPixData] = useState<{
-    qrCode: string;
-    qrCodeBase64: string;
-    bookingId: string | number;
-  } | null>(null);
+const [pixData, setPixData] = useState<{
+  qrCodeCopyPaste: string; // Mude para o nome enviado pelo back-end
+  qrCodeBase64: string;
+  bookingId: string | number;
+} | null>(null);
   const [copied, setCopied] = useState(false);
 
   const isValidUUID = UUID_REGEX.test(practitionerId);
@@ -182,13 +182,13 @@ export default function BookingPage({ practitionerId }: BookingPageProps) {
   };
 
   const handleCopyPix = () => {
-    if (pixData?.qrCode) {
-      navigator.clipboard.writeText(pixData.qrCode);
-      setCopied(true);
-      toast.success("Código Pix copiado!");
-      setTimeout(() => setCopied(false), 2000);
-    }
-  };
+  if (pixData?.qrCodeCopyPaste) {
+    navigator.clipboard.writeText(pixData.qrCodeCopyPaste);
+    setCopied(true);
+    toast.success("Código Pix copiado!");
+    setTimeout(() => setCopied(false), 2000);
+  }
+};
 
   // Mutação Mercado Pago (Pix)
   const createPixBookingMutation = trpc.bookings.createPixBooking.useMutation({
@@ -395,10 +395,10 @@ export default function BookingPage({ practitionerId }: BookingPageProps) {
                 Pix Copia e Cola
               </Label>
               <div className="flex gap-2">
-                <Input
-                  readOnly
-                  value={pixData.qrCode}
-                  className="bg-black/30 border-border/60 font-mono text-xs text-muted-foreground truncate"
+               <Input
+                readOnly
+                value={pixData.qrCodeCopyPaste}
+                className="bg-black/30 border-border/60 font-mono text-xs text-muted-foreground truncate"
                 />
                 <Button 
                   onClick={handleCopyPix} 
