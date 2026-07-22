@@ -27,7 +27,7 @@ const getMercadoPagoClient = () => {
   return mercadopago;
 };
 
-export async function createPIXPayment(params: {
+export async function createPixPayment(params: {
   amount: number;
   bookingId: string;
   clientEmail: string;
@@ -38,50 +38,27 @@ export async function createPIXPayment(params: {
   try {
     const mp = getMercadoPagoClient();
 
-    const preference = {
-      items: [
-        {
-          title: params.serviceName || `Corte de cabelo com ${params.practitionerName}`,
-          quantity: 1,
-          unit_price: params.amount,
-          currency_id: "BRL",
-          description: `Agendamento para ${params.clientName}`,
-        },
-      ],
-      payer: {
-        email: params.clientEmail,
-        name: params.clientName,
-      },
+    const paymentData = {
+      transaction_amount: params.amount,
+      payment_method_id: "pix",
+      description: params.serviceName || `Corte de cabelo com ${params.practitionerName}`,
       external_reference: params.bookingId,
       notification_url: `${process.env.BASE_URL}/api/webhook/mercadopago`,
-      back_urls: {
-        success: `${process.env.BASE_URL}/booking/success?bookingId=${params.bookingId}&provider=mercadopago`,
-        failure: `${process.env.BASE_URL}/booking/error`,
-        pending: `${process.env.BASE_URL}/booking/pending?bookingId=${params.bookingId}`,
+      payer: {
+        email: params.clientEmail,
+        first_name: params.clientName,
       },
-      auto_return: "approved",
-      payment_methods: {
-        excluded_payment_types: [
-          { id: "credit_card" },
-          { id: "debit_card" },
-          { id: "ticket" }, // remove boleto se quiser só PIX
-        ],
-      },
-      statement_descriptor: "BOOKINGFLOW",
     };
 
-    const response = await mp.preferences.create(preference);
+    const response = await mp.payment.create(paymentData);
 
-    const transactionData = response.body.point_of_interaction?.transaction_data;
-
-    // Atualizar booking no banco (recomendo criar uma função compartilhada)
-    // await updateBookingPaymentInfo(params.bookingId, 'mercadopago', response.body.id);
+    const payment = response.body;
+    const qrCodeData = payment.point_of_interaction?.transaction_data;
 
     return {
-      preferenceId: response.body.id,
-      initPoint: response.body.init_point,
-      qrCode: transactionData?.qr_code || null,
-      qrCodeBase64: transactionData?.qr_code_base64 || null,
+      id: payment.id.toString(),
+      qrCode: qrCodeData?.qr_code || "",
+      qrCodeBase64: qrCodeData?.qr_code_base64 || "",
       bookingId: params.bookingId,
     };
   } catch (error: any) {

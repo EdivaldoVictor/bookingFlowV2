@@ -249,10 +249,11 @@ export const appRouter = router({
 
         // 2. Chamar o serviço do Mercado Pago (passa o valor normal, não em centavos)
         const pixData = await createPixPayment({
-          amount: selectedServicePrice, 
-          email: input.clientEmail,
-          name: input.clientName,
+          amount: selectedServicePrice,
+          clientEmail: input.clientEmail,
+          clientName: input.clientName,
           bookingId: String(booking.id),
+          practitionerName: practitioner.name,
         });
 
         // 3. Retornar os dados do QR Code para o frontend
