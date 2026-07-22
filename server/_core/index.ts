@@ -69,10 +69,7 @@ async function startServer() {
         const paymentInfo = await payment.get({ id: data.id });
 
         if (paymentInfo.status === "approved") {
-          // Extrai o ID do agendamento da descrição (ex: "Agendamento - Reserva 123")
-          const description = paymentInfo.description || "";
-          const match = description.match(/Reserva ([\w-]+)/);
-          const bookingId = match ? match[1] : null;
+          const bookingId = paymentInfo.external_reference;
 
           if (bookingId) {
             console.log(`[MercadoPago] Pagamento aprovado para a reserva ${bookingId}`);

@@ -3,7 +3,7 @@
  * Real integration with Mercado Pago API
  */
 
-import mercadopago from 'mercadopago';
+import { MercadoPagoConfig, Payment } from "mercadopago";
 import { TRPCError } from '@trpc/server';
 
 export interface PixResponse {
@@ -13,18 +13,14 @@ export interface PixResponse {
   bookingId: string;
 }
 
-// Configuração
 const getMercadoPagoClient = () => {
   const accessToken = process.env.MP_ACCESS_TOKEN;
   if (!accessToken) {
     throw new Error("MP_ACCESS_TOKEN is not set in environment variables");
   }
 
-  mercadopago.configure({
-    access_token: accessToken,
-  });
-
-  return mercadopago;
+  const client = new MercadoPagoConfig({ accessToken });
+  return new Payment(client);
 };
 
 export async function createPixPayment(params: {
@@ -36,8 +32,6 @@ export async function createPixPayment(params: {
   serviceName?: string;
 }): Promise<PixResponse> {
   try {
-    const mp = getMercadoPagoClient();
-
     const paymentData = {
       transaction_amount: params.amount,
       payment_method_id: "pix",
@@ -50,9 +44,7 @@ export async function createPixPayment(params: {
       },
     };
 
-    const response = await mp.payment.create(paymentData);
-
-    const payment = response.body;
+    const payment = await getMercadoPagoClient().create(paymentData);
     const qrCodeData = payment.point_of_interaction?.transaction_data;
 
     return {
@@ -78,10 +70,7 @@ export async function processMercadoPagoWebhook(notification: any) {
   try {
     if (notification.type !== "payment") return null;
 
-    const mp = getMercadoPagoClient();
-    const payment = await mp.payment.findById(notification.data.id);
-
-    const paymentData = payment.body;
+    const paymentData = await getMercadoPagoClient().get({ id: notification.data.id });
 
     if (paymentData.status === "approved" && paymentData.external_reference) {
       const bookingId = paymentData.external_reference;
