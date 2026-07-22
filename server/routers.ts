@@ -213,7 +213,7 @@ export const appRouter = router({
           clientEmail: z.string().email(),
           clientPhone: z.string().min(1),
           bookingTime: z.string().datetime(),
-          servicePrice: z.number().nonNegative().optional(),
+          servicePrice: z.number().min(0).optional(),
           serviceName: z.string().optional(),
         })
       )
