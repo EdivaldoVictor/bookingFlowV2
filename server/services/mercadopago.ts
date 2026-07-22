@@ -6,19 +6,18 @@
 import mercadopago from 'mercadopago';
 import { TRPCError } from '@trpc/server';
 
-export interface PIXPaymentResponse {
-  preferenceId: string;
-  initPoint: string;           // Link de pagamento (fallback)
-  qrCode: string | null;
-  qrCodeBase64: string | null;
+export interface PixResponse {
+  id: string;
+  qrCode: string;
+  qrCodeBase64: string;
   bookingId: string;
 }
 
 // Configuração
 const getMercadoPagoClient = () => {
-  const accessToken = process.env.MERCADO_PAGO_ACCESS_TOKEN;
+  const accessToken = process.env.MP_ACCESS_TOKEN;
   if (!accessToken) {
-    throw new Error("MERCADO_PAGO_ACCESS_TOKEN is not set in environment variables");
+    throw new Error("MP_ACCESS_TOKEN is not set in environment variables");
   }
 
   mercadopago.configure({
@@ -28,21 +27,21 @@ const getMercadoPagoClient = () => {
   return mercadopago;
 };
 
-export async function createPIXPreference(params: {
+export async function createPIXPayment(params: {
   amount: number;
   bookingId: string;
   clientEmail: string;
   clientName: string;
   practitionerName: string;
   serviceName?: string;
-}): Promise<PIXPaymentResponse> {
+}): Promise<PixResponse> {
   try {
     const mp = getMercadoPagoClient();
 
     const preference = {
       items: [
         {
-          title: params.serviceName || `Consulta com ${params.practitionerName}`,
+          title: params.serviceName || `Corte de cabelo com ${params.practitionerName}`,
           quantity: 1,
           unit_price: params.amount,
           currency_id: "BRL",

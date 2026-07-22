@@ -191,21 +191,25 @@ const [pixData, setPixData] = useState<{
 };
 
   // Mutação Mercado Pago (Pix)
-  const createPixBookingMutation = trpc.bookings.createPixBooking.useMutation({
-    onSuccess: data => {
-      console.log("[Booking] Pix Booking created successfully:", data);
-      toast.success("Agendamento reservado! Realize o pagamento.");
-      setPixData(data as any);
-      setIsSubmitting(false);
-    },
-    onError: error => {
-      console.error("[Booking] Error creating Pix booking:", error);
-      toast.error(
-        error.message || "Falha ao gerar Pix. Tente novamente."
-      );
-      setIsSubmitting(false);
-    },
-  });
+const createPixBookingMutation = trpc.bookings.createPixBooking.useMutation({
+  onSuccess: (data) => {
+    console.log("[Booking] Pix Booking created:", data);
+    
+    setPixData({
+      qrCodeCopyPaste: data.qrCodeCopyPaste || data.qrCode || "", 
+      qrCodeBase64: data.qrCodeBase64 || "",
+      bookingId: data.bookingId,
+    });
+
+    toast.success("Pix gerado com sucesso! Escaneie o QR Code.");
+    setIsSubmitting(false);
+  },
+  onError: (error) => {
+    console.error("[Booking] Pix Error:", error);
+    toast.error(error.message || "Erro ao gerar Pix");
+    setIsSubmitting(false);
+  },
+});
 
   // Mutação Stripe (Cartão)
   const createStripeBookingMutation = trpc.bookings.createBooking.useMutation({
@@ -260,13 +264,14 @@ const [pixData, setPixData] = useState<{
 
       if (paymentMethod === "pix") {
         await createPixBookingMutation.mutateAsync({
-          practitionerId,
-          clientName: formData.clientName,
-          clientEmail: formData.clientEmail,
-          clientPhone: formData.clientPhone,
-          bookingTime: selectedSlotData.startTime.toISOString(),
-          servicePrice: selectedService.price,
-        });
+         practitionerId,
+         clientName: formData.clientName,
+         clientEmail: formData.clientEmail,
+         clientPhone: formData.clientPhone,
+         bookingTime: selectedSlotData.startTime.toISOString(),
+         amount: selectedService.price,           // ← importante
+         serviceName: selectedService.name,
+  });
       } else {
         await createStripeBookingMutation.mutateAsync({
           practitionerId,

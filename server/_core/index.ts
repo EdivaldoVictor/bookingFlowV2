@@ -89,7 +89,6 @@ async function startServer() {
                 // Calcula o horário de término (padrão de 1 hora, igual ao Stripe)
                 const endTime = new Date(booking.bookingTime);
                 endTime.setHours(endTime.getHours() + 1);
-
                 const calComResult = await createCalComBooking({
                   practitionerId: booking.practitionerId,
                   clientName: booking.clientName,
