@@ -3,7 +3,7 @@
  * Integrado com o webhook.ts
  */
 
-import { MercadoPagoConfig, Preference, Payment } from "mercadopago";
+import { MercadoPagoConfig, Payment } from "mercadopago";
 import { TRPCError } from '@trpc/server';
 
 export interface PixResponse {
@@ -22,9 +22,6 @@ const getMercadoPagoClient = () => {
   return new MercadoPagoConfig({ accessToken });
 };
 
-/**
- * Cria pagamento PIX usando Preference (recomendado)
- */
 export async function createPixPayment(params: {
   amount: number;
   bookingId: string;
@@ -41,41 +38,28 @@ export async function createPixPayment(params: {
   }
 
   try {
-    const preferenceClient = new Preference(getMercadoPagoClient());
+    const paymentClient = new Payment(getMercadoPagoClient());
 
-    const preference = await preferenceClient.create({
+    const payment = await paymentClient.create({
       body: {
-        items: [
-          {
-            id: "1",
-            title: params.serviceName || `Agendamento com ${params.practitionerName}`,
-            quantity: 1,
-            unit_price: Number(params.amount),
-            currency_id: "BRL",
-          },
-        ],
+        transaction_amount: Number(params.amount),
+        payment_method_id: "pix",
         payer: {
           email: params.clientEmail,
-          name: params.clientName,
+          first_name: params.clientName,
         },
         external_reference: params.bookingId,
         notification_url: `${process.env.BASE_URL}/api/webhooks/mercadopago`,
-        back_urls: {
-          success: `${process.env.BASE_URL}/booking/success?provider=mercadopago&bookingId=${params.bookingId}`,
-          pending: `${process.env.BASE_URL}/booking/pending?bookingId=${params.bookingId}`,
-          failure: `${process.env.BASE_URL}/booking/error`,
-        },
-        auto_return: "approved",
-        binary_mode: false,
+        description: params.serviceName || `Agendamento com ${params.practitionerName}`,
       },
     });
 
-    const transactionData = (preference as any).point_of_interaction?.transaction_data;
+    const transactionData = payment.point_of_interaction?.transaction_data;
 
     if (!transactionData?.qr_code) {
       console.error(
-        "[Mercado Pago Error] Missing qr_code in preference response:",
-        JSON.stringify(preference, null, 2)
+        "[Mercado Pago Error] Missing qr_code in payment response:",
+        JSON.stringify(payment, null, 2)
       );
       throw new TRPCError({
         code: "INTERNAL_SERVER_ERROR",
@@ -84,14 +68,15 @@ export async function createPixPayment(params: {
     }
 
     return {
-      id: preference.id || "",
+      id: String(payment.id),
       qrCode: transactionData.qr_code,
       qrCodeCopyPaste: transactionData.qr_code,
       qrCodeBase64: transactionData.qr_code_base64 || "",
       bookingId: params.bookingId,
     };
   } catch (error: any) {
-    console.error("[Mercado Pago Error]:", error.message || error);
+    const message = error?.response?.data?.message || error.message || error;
+    console.error("[Mercado Pago Error]:", message);
     throw new TRPCError({
       code: "INTERNAL_SERVER_ERROR",
       message: "Erro ao gerar pagamento PIX",
@@ -100,10 +85,6 @@ export async function createPixPayment(params: {
   }
 }
 
-/**
- * Processa webhook do Mercado Pago
- * Totalmente integrado com a lógica do webhook.ts
- */
 export async function processMercadoPagoWebhook(notification: any) {
   try {
     if (notification.type !== "payment") return null;
@@ -113,9 +94,7 @@ export async function processMercadoPagoWebhook(notification: any) {
 
     if (paymentData.status === "approved" && paymentData.external_reference) {
       const bookingId = paymentData.external_reference;
-
       console.log(`✅ Pagamento PIX aprovado! Booking: ${bookingId}`);
-
       return {
         bookingId,
         paymentId: paymentData.id,
