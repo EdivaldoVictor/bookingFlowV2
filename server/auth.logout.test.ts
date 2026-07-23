@@ -57,6 +57,7 @@ describe("auth.logout", () => {
     expect(clearedCookies[0]?.options).toMatchObject({
       maxAge: -1,
       secure: true,
+      // HTTPS requests keep SameSite=None for cross-site OAuth flows.
       sameSite: "none",
       httpOnly: true,
       path: "/",

@@ -6,20 +6,10 @@ import { Practitioner } from "../drizzle/schema";
 // Mock the entire db module
 const mockPractitioner: Practitioner = {
   id: 1,
-  name: "Dr. Sarah Johnson",
-  email: "sarah@example.com",
-  description: "Clinical Psychologist",
-  hourlyRate: 8000, // £80
-  createdAt: new Date(),
-  updatedAt: new Date(),
-};
-
-const mockPractitioner2: Practitioner = {
-  id: 2,
-  name: "Dr. Michael Chen",
-  email: "michael@example.com",
-  description: "Therapist",
-  hourlyRate: 7500, // £75
+  name: "Bispo barber",
+  email: "bispo@example.com",
+  description: "Barber",
+  hourlyRate: 6000, // £60
   createdAt: new Date(),
   updatedAt: new Date(),
 };
@@ -30,8 +20,7 @@ const mockBookings: any[] = [];
 // Mock the database functions
 vi.mock("./db", () => ({
   getPractitioner: vi.fn(async (id: number) => {
-    if (id === 1) return mockPractitioner;
-    if (id === 2) return mockPractitioner2;
+    if (id === 1 || id === 2) return mockPractitioner;
     return undefined;
   }),
   createBooking: vi.fn(async (booking: any) => {
@@ -436,6 +425,75 @@ describe("bookings router", () => {
       });
 
       expect(result2).toHaveProperty("bookingId");
+    });
+  });
+
+  describe("bookings.getUserBookings", () => {
+    it("should return bookings for the authenticated user", async () => {
+      const bookingTime = generateFutureDate(12, 9);
+      mockBookings.push({
+        id: "booking-user-1",
+        practitionerId: 1,
+        clientName: "John Doe",
+        clientEmail: "john@example.com",
+        clientPhone: "+1234567890",
+        bookingTime,
+        status: "confirmed",
+        amount: mockPractitioner.hourlyRate,
+        stripeSessionId: null,
+        stripePaymentIntentId: null,
+      });
+
+      const userCtx = {
+        ...createMockContext(),
+        user: {
+          id: 1,
+          openId: "user-open-id",
+          name: "John Doe",
+          email: "john@example.com",
+          role: "user",
+        },
+      } as TrpcContext;
+      const userCaller = appRouter.createCaller(userCtx);
+
+      const result = await userCaller.bookings.getUserBookings();
+
+      expect(result).toHaveLength(1);
+      expect(result[0].clientEmail).toBe("john@example.com");
+    });
+  });
+
+  describe("bookings.getAdminBookings", () => {
+    it("should return all bookings for admins", async () => {
+      mockBookings.push({
+        id: "booking-admin-1",
+        practitionerId: 1,
+        clientName: "Jane Smith",
+        clientEmail: "jane@example.com",
+        clientPhone: "+1234567890",
+        bookingTime: generateFutureDate(13, 10),
+        status: "pending",
+        amount: 5000,
+        stripeSessionId: null,
+        stripePaymentIntentId: null,
+      });
+
+      const adminCtx = {
+        ...createMockContext(),
+        user: {
+          id: 2,
+          openId: "admin-open-id",
+          name: "Admin",
+          email: "admin@example.com",
+          role: "admin",
+        },
+      } as TrpcContext;
+      const adminCaller = appRouter.createCaller(adminCtx);
+
+      const result = await adminCaller.bookings.getAdminBookings();
+
+      expect(result).toHaveLength(1);
+      expect(result[0].clientEmail).toBe("jane@example.com");
     });
   });
 

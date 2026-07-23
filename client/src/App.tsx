@@ -7,6 +7,7 @@ import { ThemeProvider } from "./contexts/ThemeContext";
 import Home from "./pages/Home";
 import BookingPage from "./pages/BookingPage";
 import BookingSuccess from "./pages/BookingSuccess";
+import DashboardPage from "./pages/DashboardPage";
 
 function Router() {
   // make sure to consider if you need authentication for certain routes
@@ -19,6 +20,8 @@ function Router() {
         )}
       </Route>
       <Route path="/booking/success" component={BookingSuccess} />
+      <Route path="/dashboard" component={DashboardPage} />
+      <Route path="/dashboard/admin" component={DashboardPage} />
       <Route path={"/404"} component={NotFound} />
       {/* Final fallback route */}
       <Route component={NotFound} />
@@ -35,7 +38,7 @@ function App() {
   return (
     <ErrorBoundary>
       <ThemeProvider
-        defaultTheme="bg"
+        defaultTheme="dark"
         // switchable
       >
         <TooltipProvider>

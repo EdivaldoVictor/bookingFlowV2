@@ -8,25 +8,11 @@ dotenv.config({ path: ".env.local" });
 
 const practitionersData = [
   {
-    id: process.env.PRACTITIONER_SARAH_UUID as string,
-    name: "Dr. Sarah Johnson",
-    email: "sarah@example.com",
-    description: "Clinical Psychologist",
-    hourlyRate: 8000, // £80
-  },
-  {
-    id: process.env.PRACTITIONER_MICHAEL_UUID as string,
-    name: "Dr. Michael Chen",
-    email: "michael@example.com",
-    description: "Therapist",
-    hourlyRate: 7500, // £75
-  },
-  {
-    id: process.env.PRACTITIONER_EMMA_UUID as string,
-    name: "Emma Wilson",
-    email: "emma@example.com",
-    description: "Counselor",
-    hourlyRate: 6000, // £60
+    id: process.env.PRACTITIONER_BISPO_UUID as string,
+    name: "Bispo barber",
+    email: "bispo@example.com",
+    description: "Barber",
+    hourlyRate: 4500, // R$ 45.00
   },
 ];
 
@@ -38,18 +24,8 @@ const setupDatabase = async () => {
   });
 
   try {
-    // Drop existing tables if they exist
-    console.log("📝 Dropping existing tables...");
-    await pool.query(`
-      DROP TABLE IF EXISTS bookings CASCADE;
-      DROP TABLE IF EXISTS practitioners CASCADE;
-      DROP TABLE IF EXISTS users CASCADE;
-      DROP TYPE IF EXISTS role CASCADE;
-      DROP TYPE IF EXISTS status CASCADE;
-    `);
+    console.log("🏗️ Creating schema (if not exists)...");
 
-    console.log("🏗️ Creating schema...");
-    
     // Enable UUID extension
     try {
       await pool.query(`CREATE EXTENSION IF NOT EXISTS "pgcrypto"`);
@@ -64,13 +40,22 @@ const setupDatabase = async () => {
       }
     }
     
-    // Create enums
-    await pool.query(`CREATE TYPE "role" AS ENUM('user', 'admin')`);
-    await pool.query(`CREATE TYPE "status" AS ENUM('pending', 'confirmed', 'cancelled')`);
+    // Create enums if they don't exist
+    const roleExists = await pool.query(`SELECT 1 FROM pg_type WHERE typname = 'role'`);
+    if (roleExists.rows.length === 0) {
+      await pool.query(`CREATE TYPE "role" AS ENUM('user', 'admin')`);
+      console.log("   ✅ role enum created");
+    }
+    
+    const statusExists = await pool.query(`SELECT 1 FROM pg_type WHERE typname = 'status'`);
+    if (statusExists.rows.length === 0) {
+      await pool.query(`CREATE TYPE "status" AS ENUM('pending', 'confirmed', 'cancelled')`);
+      console.log("   ✅ status enum created");
+    }
 
     // Create tables with UUIDs
     await pool.query(`
-      CREATE TABLE "practitioners" (
+      CREATE TABLE IF NOT EXISTS "practitioners" (
         "id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
         "name" varchar(255) NOT NULL,
         "email" varchar(320) NOT NULL,
@@ -82,7 +67,7 @@ const setupDatabase = async () => {
     `);
 
     await pool.query(`
-      CREATE TABLE "bookings" (
+      CREATE TABLE IF NOT EXISTS "bookings" (
         "id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
         "practitionerId" uuid NOT NULL,
         "clientName" varchar(255) NOT NULL,
@@ -103,11 +88,12 @@ const setupDatabase = async () => {
     `);
 
     await pool.query(`
-      CREATE TABLE "users" (
+      CREATE TABLE IF NOT EXISTS "users" (
         "id" integer PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
         "openId" varchar(64) NOT NULL UNIQUE,
         "name" text,
         "email" varchar(320),
+        "passwordHash" text,
         "loginMethod" varchar(64),
         "role" "role" DEFAULT 'user' NOT NULL,
         "createdAt" timestamp DEFAULT now() NOT NULL,
@@ -125,6 +111,55 @@ const setupDatabase = async () => {
   }
 };
 
+const seedAdminUser = async (pool: Pool) => {
+  const { hashPassword } = await import("../server/_core/password");
+  const { ENV } = await import("../server/_core/env");
+
+  const normalizedEmail = ENV.adminEmail.trim().toLowerCase();
+  const password = process.env.ADMIN_PASSWORD ?? "welcome22@@";
+  const openId = `local:${normalizedEmail}`;
+  const passwordHash = await hashPassword(password);
+
+  const existing = await pool.query(
+    `SELECT id FROM users WHERE email = $1 LIMIT 1`,
+    [normalizedEmail]
+  );
+
+  if (existing.rows.length === 0) {
+    console.log(`👤 Creating admin user ${normalizedEmail}...`);
+    await pool.query(
+      `INSERT INTO users ("openId", name, email, "passwordHash", "loginMethod", role, "lastSignedIn")
+       VALUES ($1, $2, $3, $4, 'local', 'admin', NOW())`,
+      [openId, "Admin", normalizedEmail, passwordHash]
+    );
+  } else {
+    await pool.query(
+      `UPDATE users
+       SET "openId" = $2,
+           "passwordHash" = $3,
+           "loginMethod" = 'local',
+           role = 'admin',
+           "updatedAt" = NOW()
+       WHERE email = $1`,
+      [normalizedEmail, openId, passwordHash]
+    );
+    console.log(`👤 Admin user ${normalizedEmail} password synced`);
+  }
+};
+
+const ensurePasswordHashColumn = async (pool: Pool) => {
+  const columns = await pool.query<{ column_name: string }>(
+    `SELECT column_name
+     FROM information_schema.columns
+     WHERE table_schema = 'public' AND table_name = 'users'`
+  );
+  const names = columns.rows.map((row) => row.column_name);
+  if (!names.includes("passwordHash")) {
+    console.log('📝 Adding missing column "passwordHash" to users...');
+    await pool.query(`ALTER TABLE "users" ADD COLUMN "passwordHash" text`);
+  }
+};
+
 const seedDatabase = async () => {
   console.log("🌱 Seeding database...");
 
@@ -133,6 +168,7 @@ const seedDatabase = async () => {
   });
 
   try {
+    await ensurePasswordHashColumn(pool);
     const db = drizzle(pool);
 
     // Check if practitioners already exist
@@ -209,6 +245,8 @@ const seedDatabase = async () => {
     // Show final count
     const finalCount = await db.select().from(practitioners);
     console.log(`\n📈 Total practitioners in database: ${finalCount.length}`);
+
+    await seedAdminUser(pool);
 
   } catch (error) {
     console.error("❌ Error seeding database:", error);

@@ -20,6 +20,34 @@ const CAL_API_VERSION_BOOKINGS = "2026-02-25";
 const DEFAULT_CALCOM_URL = "https://api.cal.com/v2";
 const DEFAULT_TIMEZONE = "America/Recife";
 
+export function normalizePhoneNumber(input?: string): string | undefined {
+  if (!input) return undefined;
+
+  const trimmed = input.trim();
+  if (!trimmed) return undefined;
+
+  const cleaned = trimmed.replace(/[^\d+]/g, "");
+  if (!cleaned) return undefined;
+
+  if (cleaned.startsWith("00")) {
+    return `+${cleaned.slice(2)}`;
+  }
+
+  if (cleaned.startsWith("+")) {
+    return /^\+\d{8,15}$/.test(cleaned) ? cleaned : undefined;
+  }
+
+  if (cleaned.startsWith("55") && cleaned.length >= 12) {
+    return `+${cleaned}`;
+  }
+
+  if (cleaned.length === 10 || cleaned.length === 11) {
+    return `+55${cleaned}`;
+  }
+
+  return undefined;
+}
+
 interface CalComSlotsResponse {
   status: string;
   data: Record<
@@ -277,8 +305,9 @@ export async function createCalComBooking(bookingData: {
       language: "en",
     };
 
-    if (bookingData.clientPhone) {
-      attendee.phoneNumber = bookingData.clientPhone;
+    const normalizedPhone = normalizePhoneNumber(bookingData.clientPhone);
+    if (normalizedPhone) {
+      attendee.phoneNumber = normalizedPhone;
     }
 
     // Do not set location.type = "attendeePhone" here.

@@ -30,15 +30,20 @@ export const protectedProcedure = t.procedure.use(requireUser);
 export const adminProcedure = t.procedure.use(
   t.middleware(async opts => {
     const { ctx, next } = opts;
+    const { resolveUserRole } = await import("./roles");
 
-    if (!ctx.user || ctx.user.role !== "admin") {
+    const isAdmin = Boolean(ctx.user && resolveUserRole(ctx.user) === "admin");
+    if (!ctx.user || !isAdmin) {
       throw new TRPCError({ code: "FORBIDDEN", message: NOT_ADMIN_ERR_MSG });
     }
 
     return next({
       ctx: {
         ...ctx,
-        user: ctx.user,
+        user: {
+          ...ctx.user,
+          role: "admin" as const,
+        },
       },
     });
   })

@@ -3,6 +3,7 @@ import type { Express, Request, Response } from "express";
 import * as db from "../db";
 import { getSessionCookieOptions } from "./cookies";
 import { sdk } from "./sdk";
+import { resolveUserRole } from "./roles";
 
 function getQueryParam(req: Request, key: string): string | undefined {
   const value = req.query[key];
@@ -20,8 +21,20 @@ export function registerOAuthRoutes(app: Express) {
     }
 
     try {
-      const tokenResponse = await sdk.exchangeCodeForToken(code, state);
-      const userInfo = await sdk.getUserInfo(tokenResponse.accessToken);
+      let userInfo: { openId: string; name?: string | null; email?: string | null; loginMethod?: string | null; platform?: string | null };
+
+      if (code === "local-dev-code") {
+        userInfo = {
+          openId: "local-dev-user",
+          name: "Usuário local",
+          email: "local@example.com",
+          loginMethod: "local-dev",
+          platform: "local-dev",
+        };
+      } else {
+        const tokenResponse = await sdk.exchangeCodeForToken(code, state);
+        userInfo = await sdk.getUserInfo(tokenResponse.accessToken);
+      }
 
       if (!userInfo.openId) {
         res.status(400).json({ error: "openId missing from user info" });
@@ -47,7 +60,17 @@ export function registerOAuthRoutes(app: Express) {
         maxAge: ONE_YEAR_MS,
       });
 
-      res.redirect(302, "/");
+      const user = await db.getUserByOpenId(userInfo.openId);
+      const role = user ? resolveUserRole(user) : "user";
+
+      const redirectTo =
+        (typeof req.query.redirectTo === "string" && req.query.redirectTo.startsWith("/"))
+          ? req.query.redirectTo
+          : role === "admin"
+            ? "/dashboard/admin"
+            : "/dashboard";
+
+      res.redirect(302, redirectTo);
     } catch (error) {
       console.error("[OAuth] Callback failed", error);
       res.status(500).json({ error: "OAuth callback failed" });

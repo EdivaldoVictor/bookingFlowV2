@@ -32,6 +32,8 @@ export const users = pgTable("users", {
   openId: varchar("openId", { length: 64 }).notNull().unique(),
   name: text("name"),
   email: varchar("email", { length: 320 }),
+  /** scrypt hash (`salt:hash`) for local email/password auth. Null for OAuth-only users. */
+  passwordHash: text("passwordHash"),
   loginMethod: varchar("loginMethod", { length: 64 }),
   role: roleEnum("role").default("user").notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
@@ -41,6 +43,8 @@ export const users = pgTable("users", {
 
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
+/** Safe user payload without secrets — use for API responses. */
+export type PublicUser = Omit<User, "passwordHash">;
 
 /**
  * Practitioners table for booking system
