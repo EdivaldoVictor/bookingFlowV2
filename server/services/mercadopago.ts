@@ -67,7 +67,6 @@ export async function createPixPayment(params: {
         },
         auto_return: "approved",
         binary_mode: true,
-        processing_modes: ["pix"],
         payment_methods: {
           excluded_payment_types: [{ id: "credit_card" }, { id: "debit_card" }],
         },
