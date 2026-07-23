@@ -1,9 +1,9 @@
 /**
  * Mercado Pago service for PIX payments
- * Real integration with Mercado Pago API
+ * Integrado com o webhook.ts
  */
 
-import { MercadoPagoConfig, Payment } from "mercadopago";
+import { MercadoPagoConfig, Preference, Payment } from "mercadopago";
 import { TRPCError } from '@trpc/server';
 
 export interface PixResponse {
@@ -18,11 +18,12 @@ const getMercadoPagoClient = () => {
   if (!accessToken) {
     throw new Error("MP_ACCESS_TOKEN is not set in environment variables");
   }
-
-  const client = new MercadoPagoConfig({ accessToken });
-  return new Payment(client);
+  return new MercadoPagoConfig({ accessToken });
 };
 
+/**
+ * Cria pagamento PIX usando Preference (recomendado)
+ */
 export async function createPixPayment(params: {
   amount: number;
   bookingId: string;
@@ -39,25 +40,49 @@ export async function createPixPayment(params: {
   }
 
   try {
-    const paymentData = {
-      transaction_amount: params.amount,
-      payment_method_id: "pix",
-      description: params.serviceName || `Corte de cabelo com ${params.practitionerName}`,
-      external_reference: params.bookingId,
-      notification_url: `${process.env.BASE_URL}/api/webhook/mercadopago`,
-      payer: {
-        email: params.clientEmail,
-        first_name: params.clientName,
-      },
-    };
+    const preferenceClient = new Preference(getMercadoPagoClient());
 
-    const payment = await getMercadoPagoClient().create({ body: paymentData });
-    const qrCodeData = payment.point_of_interaction?.transaction_data;
+    const preference = await preferenceClient.create({
+      body: {
+        items: [
+          {
+            title: params.serviceName || `Agendamento com ${params.practitionerName}`,
+            quantity: 1,
+            unit_price: Number(params.amount),
+            currency_id: "BRL",
+          },
+        ],
+        payer: {
+          email: params.clientEmail,
+          first_name: params.clientName,
+        },
+        external_reference: params.bookingId,
+        notification_url: `${process.env.BASE_URL}/api/webhooks/mercadopago`, // ← Corrigido
+        back_urls: {
+          success: `${process.env.BASE_URL}/booking/success?provider=mercadopago&bookingId=${params.bookingId}`,
+          pending: `${process.env.BASE_URL}/booking/pending?bookingId=${params.bookingId}`,
+          failure: `${process.env.BASE_URL}/booking/error`,
+        },
+        auto_return: "approved",
+        payment_methods: {
+          excluded_payment_types: [{ id: "credit_card" }, { id: "debit_card" }],
+        },
+      },
+    });
+
+    const transactionData = preference.point_of_interaction?.transaction_data;
+
+    if (!transactionData?.qr_code) {
+      throw new TRPCError({
+        code: "INTERNAL_SERVER_ERROR",
+        message: "Não foi possível gerar o código PIX",
+      });
+    }
 
     return {
-      id: payment.id.toString(),
-      qrCode: qrCodeData?.qr_code || "",
-      qrCodeBase64: qrCodeData?.qr_code_base64 || "",
+      id: preference.id,
+      qrCode: transactionData.qr_code,
+      qrCodeBase64: transactionData.qr_code_base64 || "",
       bookingId: params.bookingId,
     };
   } catch (error: any) {
@@ -72,18 +97,17 @@ export async function createPixPayment(params: {
 
 /**
  * Processa webhook do Mercado Pago
+ * Totalmente integrado com a lógica do webhook.ts
  */
 export async function processMercadoPagoWebhook(notification: any) {
   try {
     if (notification.type !== "payment") return null;
 
-    const paymentData = await getMercadoPagoClient().get({ id: notification.data.id });
+    const paymentClient = new Payment(getMercadoPagoClient());
+    const paymentData = await paymentClient.get({ id: notification.data.id });
 
     if (paymentData.status === "approved" && paymentData.external_reference) {
       const bookingId = paymentData.external_reference;
-
-      // Aqui você deve chamar a mesma lógica que usa no Stripe para confirmar booking + criar evento no Cal.com
-      // Ex: await confirmBookingAndCreateEvent(bookingId);
 
       console.log(`✅ Pagamento PIX aprovado! Booking: ${bookingId}`);
 

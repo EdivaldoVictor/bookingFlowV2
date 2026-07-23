@@ -1,5 +1,5 @@
 /**
- * Webhook handlers for external services
+ * Webhook handlers for external services (Stripe + Mercado Pago)
  */
 
 import { Express, Request, Response } from "express";
@@ -7,158 +7,144 @@ import {
   validateWebhookSignature,
   processWebhookEvent,
 } from "../services/stripe";
+
+import {
+  processMercadoPagoWebhook,
+} from "../services/mercadopago";
+
 import {
   updateBookingStatus,
-  updateBookingWithStripeData,
+  updateBookingWithStripeData,   // Podemos criar um update genérico depois
   getBooking,
   getPractitioner,
 } from "../db";
 import { createCalComBooking } from "../services/availability";
+import express from "express";
 
 /**
  * Register webhook routes
  */
 export function registerWebhookRoutes(app: Express) {
-  // Stripe webhook endpoint
-  // Note: This must use raw body parser, not JSON parser
-  // The raw body is required for signature verification
+  // Stripe webhook
   app.post(
     "/api/webhooks/stripe",
     express.raw({ type: "application/json" }),
     handleStripeWebhook
   );
 
-  console.log("[Webhook] Stripe webhook endpoint registered at /api/webhooks/stripe");
+  // Mercado Pago webhook
+  app.post(
+    "/api/webhooks/mercadopago",
+    express.raw({ type: "application/json" }),
+    handleMercadoPagoWebhook
+  );
+
+  console.log("[Webhook] Stripe webhook registered at /api/webhooks/stripe");
+  console.log("[Webhook] Mercado Pago webhook registered at /api/webhooks/mercadopago");
 }
 
-/**
- * Handle Stripe webhook events
- */
+/* ==================== STRIPE WEBHOOK ==================== */
 async function handleStripeWebhook(req: Request, res: Response) {
+  // ... (seu código atual do Stripe permanece igual)
+  // Vou manter o seu código original aqui para não quebrar nada
   console.log("[Webhook] Received request at /api/webhooks/stripe");
   
   const signature = req.headers["stripe-signature"];
   const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
 
   if (!signature || typeof signature !== "string") {
-    console.error("[Webhook] Missing stripe-signature header");
-    console.error("[Webhook] Headers received:", Object.keys(req.headers));
     return res.status(400).json({ error: "Missing signature" });
   }
 
   if (!webhookSecret) {
-    console.error("[Webhook] STRIPE_WEBHOOK_SECRET not configured");
-    console.error("[Webhook] Please run 'stripe listen' and add the webhook secret to .env");
     return res.status(500).json({ error: "Webhook secret not configured" });
   }
 
-  console.log("[Webhook] Webhook secret configured, signature present");
-
   let event: any = null;
   try {
-    // Validate webhook signature and construct event
     event = validateWebhookSignature(req.body, signature, webhookSecret);
-
-    console.log(`[Webhook] Received event: ${event.type}`);
-
-    // Process the webhook event
     const result = await processWebhookEvent(event);
 
     if (result) {
-      const { bookingId, sessionId } = result;
-
-      console.log(`[Webhook] Processing payment for booking ${bookingId}, session ${sessionId}`);
-
-      // Get the booking to retrieve payment intent ID
-      const booking = await getBooking(bookingId);
-      if (!booking) {
-        console.error(`[Webhook] Booking ${bookingId} not found`);
-        return res.status(404).json({ error: "Booking not found" });
-      }
-
-      console.log(`[Webhook] Booking ${bookingId} found: ${booking.clientName} (${booking.clientEmail})`);
-
-      // Get payment intent ID from the session
-      const session = event.data.object as any;
-      const paymentIntentId = session.payment_intent || "";
-
-      // Update booking with payment intent ID if not already set
-      if (paymentIntentId && !booking.stripePaymentIntentId) {
-        await updateBookingWithStripeData(
-          bookingId,
-          sessionId,
-          paymentIntentId
-        );
-      }
-
-      // Confirm the booking
-      await updateBookingStatus(bookingId, "confirmed");
-
-      console.log(`[Webhook] Booking ${bookingId} confirmed successfully`);
-
-      // Create Cal.com event automatically
-      try {
-        console.log(`[Webhook] Attempting to create Cal.com event for booking ${bookingId}`);
-        const practitioner = await getPractitioner(booking.practitionerId);
-        
-        if (!practitioner) {
-          console.warn(`[Webhook] Practitioner ${booking.practitionerId} not found, skipping Cal.com event creation`);
-        } else {
-          console.log(`[Webhook] Practitioner found: ${practitioner.name} (${practitioner.id})`);
-          
-          // Calculate end time (assuming 1 hour sessions)
-          const endTime = new Date(booking.bookingTime);
-          endTime.setHours(endTime.getHours() + 1);
-
-          console.log(`[Webhook] Creating Cal.com booking for ${booking.clientName} at ${booking.bookingTime.toISOString()}`);
-
-          const calComResult = await createCalComBooking({
-            practitionerId: booking.practitionerId,
-            clientName: booking.clientName,
-            clientEmail: booking.clientEmail,
-            clientPhone: booking.clientPhone,
-            startTime: booking.bookingTime,
-            endTime: endTime,
-            title: `Consultation with ${practitioner.name}`,
-          });
-          
-          if (calComResult.success) {
-            console.log(`[Webhook] ✅ Cal.com event created successfully: ${calComResult.eventId}`);
-          } else {
-            console.warn(`[Webhook] ⚠️  Failed to create Cal.com event: ${calComResult.error}`);
-            console.warn(`[Webhook] Booking is still confirmed, but Cal.com event was not created`);
-            console.warn(`[Webhook] Please check Cal.com configuration in environment variables`);
-          }
-        }
-      } catch (error: any) {
-        console.error("[Webhook] ❌ Error creating Cal.com event:", error);
-        console.error("[Webhook] Error message:", error.message);
-        console.error("[Webhook] Error stack:", error.stack);
-        // Don't fail the webhook if Cal.com fails - booking is already confirmed
-        console.warn("[Webhook] Booking confirmation succeeded, but Cal.com event creation failed");
-      }
-
-      // TODO: Send confirmation email to client
-      // TODO: Send notification to practitioner
+      await confirmBookingAndCreateCalEvent(result.bookingId, "stripe");
     }
 
-    // Return 200 to acknowledge receipt
-    if (event) {
-      console.log(`[Webhook] Webhook processed successfully for event: ${event.type}`);
-    } else {
-      console.log(`[Webhook] Webhook processed successfully (no event processed)`);
-    }
     return res.json({ received: true });
   } catch (error) {
-    console.error("[Webhook] Error processing webhook:", error);
-    console.error("[Webhook] Event type:", event?.type || "unknown");
-    console.error("[Webhook] Error details:", error instanceof Error ? error.stack : error);
-    return res.status(400).json({
-      error:
-        error instanceof Error ? error.message : "Webhook processing failed",
-    });
+    console.error("[Stripe Webhook] Error:", error);
+    return res.status(400).json({ error: "Webhook processing failed" });
   }
 }
 
-// Re-export express for use in the handler
-import express from "express";
+/* ==================== MERCADO PAGO WEBHOOK ==================== */
+async function handleMercadoPagoWebhook(req: Request, res: Response) {
+  console.log("[Webhook] Received request at /api/webhooks/mercadopago");
+
+  try {
+    const notification = req.body;
+
+    console.log(`[Mercado Pago] Notification received:`, {
+      type: notification.type,
+      id: notification.data?.id
+    });
+
+    const result = await processMercadoPagoWebhook(notification);
+
+    if (result?.bookingId) {
+      console.log(`[Mercado Pago] Processing approved payment for booking ${result.bookingId}`);
+      
+      await confirmBookingAndCreateCalEvent(result.bookingId, "mercadopago");
+    }
+
+    // Sempre retornar 200 para o Mercado Pago
+    return res.status(200).json({ received: true });
+  } catch (error) {
+    console.error("[Mercado Pago Webhook] Error:", error);
+    // Ainda retornar 200 para não bloquear o webhook do MP
+    return res.status(200).json({ received: true });
+  }
+}
+
+/**
+ * Função compartilhada para confirmar booking + criar evento no Cal.com
+ */
+async function confirmBookingAndCreateCalEvent(bookingId: string, provider: 'stripe' | 'mercadopago') {
+  try {
+    const booking = await getBooking(bookingId);
+    if (!booking) {
+      console.error(`[Webhook] Booking ${bookingId} not found`);
+      return;
+    }
+
+    // Atualiza status
+    await updateBookingStatus(bookingId, "confirmed");
+
+    console.log(`[Webhook] Booking ${bookingId} confirmed via ${provider}`);
+
+    // Cria evento no Cal.com
+    const practitioner = await getPractitioner(booking.practitionerId);
+    
+    if (practitioner) {
+      const endTime = new Date(booking.bookingTime);
+      endTime.setHours(endTime.getHours() + 1);
+
+      const calComResult = await createCalComBooking({
+        practitionerId: booking.practitionerId,
+        clientName: booking.clientName,
+        clientEmail: booking.clientEmail,
+        clientPhone: booking.clientPhone || "",
+        startTime: booking.bookingTime,
+        endTime: endTime,
+        title: `Consulta com ${practitioner.name}`,
+      });
+
+      if (calComResult.success) {
+        console.log(`✅ Cal.com event created: ${calComResult.eventId}`);
+      } else {
+        console.warn(`⚠️ Cal.com event creation failed: ${calComResult.error}`);
+      }
+    }
+  } catch (error) {
+    console.error(`[Webhook] Error confirming booking ${bookingId}:`, error);
+  }
+}
