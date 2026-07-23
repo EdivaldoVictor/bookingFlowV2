@@ -261,7 +261,6 @@ export const appRouter = router({
 
         // 3. Retornar os dados do QR Code para o frontend
         return {
-          bookingId: booking.id,
           ...pixData,
         };
       }),

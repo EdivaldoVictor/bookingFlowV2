@@ -9,6 +9,7 @@ import { TRPCError } from '@trpc/server';
 export interface PixResponse {
   id: string;
   qrCode: string;
+  qrCodeCopyPaste: string;
   qrCodeBase64: string;
   bookingId: string;
 }
@@ -46,6 +47,7 @@ export async function createPixPayment(params: {
       body: {
         items: [
           {
+            id: "1",
             title: params.serviceName || `Agendamento com ${params.practitionerName}`,
             quantity: 1,
             unit_price: Number(params.amount),
@@ -54,25 +56,31 @@ export async function createPixPayment(params: {
         ],
         payer: {
           email: params.clientEmail,
-          first_name: params.clientName,
+          name: params.clientName,
         },
         external_reference: params.bookingId,
-        notification_url: `${process.env.BASE_URL}/api/webhooks/mercadopago`, // ← Corrigido
+        notification_url: `${process.env.BASE_URL}/api/webhooks/mercadopago`,
         back_urls: {
           success: `${process.env.BASE_URL}/booking/success?provider=mercadopago&bookingId=${params.bookingId}`,
           pending: `${process.env.BASE_URL}/booking/pending?bookingId=${params.bookingId}`,
           failure: `${process.env.BASE_URL}/booking/error`,
         },
         auto_return: "approved",
+        binary_mode: true,
+        processing_modes: ["pix"],
         payment_methods: {
           excluded_payment_types: [{ id: "credit_card" }, { id: "debit_card" }],
         },
       },
     });
 
-    const transactionData = preference.point_of_interaction?.transaction_data;
+    const transactionData = (preference as any).point_of_interaction?.transaction_data;
 
     if (!transactionData?.qr_code) {
+      console.error(
+        "[Mercado Pago Error] Missing qr_code in preference response:",
+        JSON.stringify(preference, null, 2)
+      );
       throw new TRPCError({
         code: "INTERNAL_SERVER_ERROR",
         message: "Não foi possível gerar o código PIX",
@@ -80,8 +88,9 @@ export async function createPixPayment(params: {
     }
 
     return {
-      id: preference.id,
+      id: preference.id || "",
       qrCode: transactionData.qr_code,
+      qrCodeCopyPaste: transactionData.qr_code,
       qrCodeBase64: transactionData.qr_code_base64 || "",
       bookingId: params.bookingId,
     };
