@@ -66,10 +66,7 @@ export async function createPixPayment(params: {
           failure: `${process.env.BASE_URL}/booking/error`,
         },
         auto_return: "approved",
-        binary_mode: true,
-        payment_methods: {
-          excluded_payment_types: [{ id: "credit_card" }, { id: "debit_card" }],
-        },
+        binary_mode: false,
       },
     });
 
