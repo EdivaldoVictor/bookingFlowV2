@@ -51,7 +51,7 @@ export async function createPixPayment(params: {
       },
     };
 
-    const payment = await getMercadoPagoClient().create(paymentData);
+    const payment = await getMercadoPagoClient().create({ body: paymentData });
     const qrCodeData = payment.point_of_interaction?.transaction_data;
 
     return {
